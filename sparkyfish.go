@@ -16,6 +16,10 @@ const (
 	reportIntervalMS uint64 = 500 // report interval in milliseconds
 )
 
+var (
+	testLength *uint
+)
+
 // MeteredServer is a server that deliveres random data to the client and measures
 // the throughput
 type MeteredServer struct {
@@ -27,6 +31,7 @@ type MeteredServer struct {
 func main() {
 	listenPort := flag.String("listenport", "7121", "Port to listen on")
 	listenAddr := flag.String("listenaddr", "", "IP address to listen on (default: all)")
+	testLength = flag.Uint("testlength", 15, "Length of time to run test")
 	flag.Parse()
 
 	listenHost := fmt.Sprint(*listenAddr, ":", *listenPort)
@@ -63,12 +68,12 @@ func (m *MeteredServer) MeteredCopy(r io.Reader, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 
 	// We'll be running the test for 15 seconds
-	timer := time.NewTimer(time.Second * 15)
+	timer := time.NewTimer(time.Second * time.Duration(*testLength))
 
 	for {
 		select {
 		case <-timer.C:
-			log.Println("15 seconds has elapsed.")
+			log.Println(*testLength, "seconds have elapsed.")
 			return
 		default:
 			// Copy our random data from randbo to our ResponseWriter, 100KB at a time
