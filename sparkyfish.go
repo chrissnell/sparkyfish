@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"flag"
-	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -16,8 +18,17 @@ const (
 	reportIntervalMS uint64 = 500 // report interval in milliseconds
 )
 
+// FlowDirection is used to indicate whether we meter inbound or outbound traffic
+type FlowDirection int
+
 var (
 	testLength *uint
+	echoListen *string
+)
+
+const (
+	Outbound FlowDirection = iota
+	Inbound
 )
 
 // MeteredServer is a server that deliveres random data to the client and measures
@@ -29,21 +40,60 @@ type MeteredServer struct {
 }
 
 func main() {
-	listenPort := flag.String("listenport", "7121", "Port to listen on")
-	listenAddr := flag.String("listenaddr", "", "IP address to listen on (default: all)")
-	testLength = flag.Uint("testlength", 15, "Length of time to run test")
+	listenAddr := flag.String("listen-addr", "0.0.0.0:7121", "IP address to listen on for speed tests (default: 0.0.0.0:7121)")
+	testLength = flag.Uint("test-length", 15, "Length of time to run speed test")
+	echoListen = flag.String("echo-listen-addr", "0.0.0.0:7122", "IP address to listen on for echo tests (default: 0.0.0.0:7122)")
 	flag.Parse()
 
-	listenHost := fmt.Sprint(*listenAddr, ":", *listenPort)
+	go echoListener()
 
-	http.HandleFunc("/", handler)
-	err := http.ListenAndServe(listenHost, nil)
+	http.HandleFunc("/", outboundHandler)
+	err := http.ListenAndServe(*listenAddr, nil)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
+func echoListener() {
+	l, err := net.Listen("tcp", *echoListen)
+	if err != nil {
+		panic(err)
+	}
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		go echoHandler(conn)
+	}
+
+	err = l.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+func echoHandler(conn net.Conn) {
+	r := bufio.NewReader(conn)
+	for c := 0; c <= 9; c++ {
+		chr, err := r.ReadByte()
+		if err != nil {
+			log.Println("Error reading byte:", err)
+			break
+		}
+		log.Println("Copying byte:", chr)
+		_, err = conn.Write([]byte{chr})
+		if err != nil {
+			log.Println("Error writing byte:", err)
+			break
+		}
+	}
+	conn.Close()
+}
+
+func outboundHandler(w http.ResponseWriter, r *http.Request) {
 	m := &MeteredServer{remoteAddr: r.RemoteAddr}
 	m.done = make(chan struct{})
 	m.blockTicker = make(chan bool)
@@ -55,7 +105,26 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	rbr := randbo.New()
 
 	// Start our metered copier and block until it finishes
-	m.MeteredCopy(rbr, w)
+	m.MeteredCopy(rbr, w, r, Outbound)
+
+	// When our metered copy unblocks, the speed test is done, so we close
+	// this channel to signal the throughput reporter to halt
+	close(m.done)
+}
+
+func inboundHandler(w http.ResponseWriter, r *http.Request) {
+	m := &MeteredServer{remoteAddr: r.RemoteAddr}
+	m.done = make(chan struct{})
+	m.blockTicker = make(chan bool)
+
+	// Launch our throughput reporter in a goroutine
+	go m.ReportThroughput()
+
+	// Create a new randbo Reader
+	rbr := randbo.New()
+
+	// Start our metered copier and block until it finishes
+	m.MeteredCopy(rbr, w, r, Inbound)
 
 	// When our metered copy unblocks, the speed test is done, so we close
 	// this channel to signal the throughput reporter to halt
@@ -63,7 +132,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 // MeteredCopy copies from a Reader to a Writer, keeping count of the data it passes
-func (m *MeteredServer) MeteredCopy(r io.Reader, w http.ResponseWriter) {
+func (m *MeteredServer) MeteredCopy(r io.Reader, w http.ResponseWriter, req *http.Request, dir FlowDirection) {
+	var err error
+
 	// We're going to be sending random, binary data out.
 	w.Header().Set("Content-Type", "application/octet-stream")
 
@@ -77,7 +148,12 @@ func (m *MeteredServer) MeteredCopy(r io.Reader, w http.ResponseWriter) {
 			return
 		default:
 			// Copy our random data from randbo to our ResponseWriter, 100KB at a time
-			_, err := io.CopyN(w, r, 1024*blockSize)
+			switch dir {
+			case Outbound:
+				_, err = io.CopyN(w, r, 1024*blockSize)
+			case Inbound:
+				_, err = io.CopyN(ioutil.Discard, req.Body, 1024*blockSize)
+			}
 			if err != nil {
 				log.Println("Error copying:", err)
 				return
