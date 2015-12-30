@@ -16,14 +16,11 @@ import (
 const (
 	blockSize        int64  = 100
 	reportIntervalMS uint64 = 500 // report interval in milliseconds
+	testLength       uint   = 15
 )
 
 // TestType is used to indicate the type of test being performed
 type TestType int
-
-var (
-	testLength *uint
-)
 
 const (
 	Outbound TestType = iota
@@ -41,30 +38,29 @@ type MeteredServer struct {
 
 func main() {
 	listenAddr := flag.String("listen-addr", "0.0.0.0:7121", "IP address to listen on for speed tests (default: 0.0.0.0:7121)")
-	testLength = flag.Uint("test-length", 15, "Length of time to run speed test")
 	flag.Parse()
 
 	startListener(*listenAddr)
 }
 
 func startListener(listenAddr string) {
-	testListener, err := net.Listen("tcp", listenAddr)
+	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		panic(err)
 	}
 
 	for {
-		conn, err := testListener.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			log.Println("error accepting connection:", err)
 			continue
 		}
-		go testHandler(conn)
+		go handler(conn)
 	}
 
 }
 
-func testHandler(conn net.Conn) {
+func handler(conn net.Conn) {
 	defer conn.Close()
 	var tt TestType
 
@@ -132,28 +128,40 @@ func testHandler(conn net.Conn) {
 // MeteredCopy copies to or from a net.Conn, keeping count of the data it passes
 func (m *MeteredServer) MeteredCopy(conn net.Conn, dir TestType) {
 	var err error
+	var timer *time.Timer
 
-	// We'll be running the test for 15 seconds
-	timer := time.NewTimer(time.Second * time.Duration(*testLength))
+	// Set a timer that we'll use to stop the test.  If we're running an inbound test,
+	// we extend the timer by two seconds to allow the client to finish its sending.
+	if dir == Inbound {
+		timer = time.NewTimer(time.Second * time.Duration(testLength+2))
+	} else if dir == Outbound {
+		timer = time.NewTimer(time.Second * time.Duration(testLength))
+	}
+
+	// Create a new randbo Reader
+	rnd := randbo.New()
 
 	for {
 		select {
 		case <-timer.C:
-			log.Println(*testLength, "seconds have elapsed.")
+			log.Println(testLength, "seconds have elapsed.")
 			return
 		default:
 			// Copy our random data from randbo to our ResponseWriter, 100KB at a time
 			switch dir {
 			case Outbound:
-				// Create a new randbo Reader
-				rnd := randbo.New()
 				_, err = io.CopyN(conn, rnd, 1024*blockSize)
 			case Inbound:
 				_, err = io.CopyN(ioutil.Discard, conn, 1024*blockSize)
 			}
+
 			if err != nil {
-				log.Println("Error copying:", err)
-				return
+				if err == io.EOF {
+					return
+				} else {
+					log.Println("Error copying:", err)
+					return
+				}
 			}
 
 			// // With each 100K copied, we send a message on our blockTicker channel
@@ -180,7 +188,7 @@ func (m *MeteredServer) ReportThroughput() {
 		case <-tick.C:
 			// Every second, we calculate how many blocks were received
 			// and derive an average throughput rate.
-			log.Printf("[%v] %v KB/sec", m.remoteAddr, (blockCount-prevBlockCount)*uint64(blockSize)*(1000/reportIntervalMS))
+			log.Printf("[%v] %v Kb/sec", m.remoteAddr, (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
 			prevBlockCount = blockCount
 		}
 	}
