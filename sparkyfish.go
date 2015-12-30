@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
 	"time"
 
 	"github.com/dustin/randbo"
@@ -18,17 +18,17 @@ const (
 	reportIntervalMS uint64 = 500 // report interval in milliseconds
 )
 
-// FlowDirection is used to indicate whether we meter inbound or outbound traffic
-type FlowDirection int
+// TestType is used to indicate the type of test being performed
+type TestType int
 
 var (
 	testLength *uint
-	echoListen *string
 )
 
 const (
-	Outbound FlowDirection = iota
+	Outbound TestType = iota
 	Inbound
+	Echo
 )
 
 // MeteredServer is a server that deliveres random data to the client and measures
@@ -42,101 +42,96 @@ type MeteredServer struct {
 func main() {
 	listenAddr := flag.String("listen-addr", "0.0.0.0:7121", "IP address to listen on for speed tests (default: 0.0.0.0:7121)")
 	testLength = flag.Uint("test-length", 15, "Length of time to run speed test")
-	echoListen = flag.String("echo-listen-addr", "0.0.0.0:7122", "IP address to listen on for echo tests (default: 0.0.0.0:7122)")
 	flag.Parse()
 
-	go echoListener()
-
-	http.HandleFunc("/", outboundHandler)
-	err := http.ListenAndServe(*listenAddr, nil)
-	if err != nil {
-		panic(err)
-	}
+	startListener(*listenAddr)
 }
 
-func echoListener() {
-	l, err := net.Listen("tcp", *echoListen)
+func startListener(listenAddr string) {
+	testListener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		panic(err)
 	}
 
 	for {
-		conn, err := l.Accept()
+		conn, err := testListener.Accept()
 		if err != nil {
-			log.Fatal(err)
+			log.Println("error accepting connection:", err)
+			continue
 		}
-		go echoHandler(conn)
+		go testHandler(conn)
 	}
 
-	err = l.Close()
+}
+
+func testHandler(conn net.Conn) {
+	defer conn.Close()
+	var tt TestType
+
+	// Valid client commands, issued upon successful connection
+	cmdSND := []byte{'S', 'N', 'D'} // server->client speed test (download)
+	cmdRCV := []byte{'R', 'C', 'V'} // client->server speed test (upload)
+	cmdECO := []byte{'E', 'C', 'O'} // ping/echo test
+
+	// Read a 3-byte command from the client
+	cmd := make([]byte, 3, 3)
+	_, err := conn.Read(cmd)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("error reading from remote:", conn)
+	}
+	log.Println("COMMAND RECEIVED:", string(cmd))
+
+	switch {
+	case bytes.Compare(cmd, cmdSND) == 0:
+		tt = Outbound
+	case bytes.Compare(cmd, cmdRCV) == 0:
+		tt = Inbound
+	case bytes.Compare(cmd, cmdECO) == 0:
+		tt = Echo
+	default:
+		// If the client didn't send a SND or RCV command, close the connection
+		conn.Close()
+		return
 	}
 
-}
+	if tt == Echo {
+		// Start an echo/ping test
+		r := bufio.NewReader(conn)
+		for c := 0; c <= 9; c++ {
+			chr, err := r.ReadByte()
+			if err != nil {
+				log.Println("Error reading byte:", err)
+				break
+			}
+			log.Println("Copying byte:", chr)
+			_, err = conn.Write([]byte{chr})
+			if err != nil {
+				log.Println("Error writing byte:", err)
+				break
+			}
+		}
+		return
+	} else {
+		// Start an upload/download test
+		m := &MeteredServer{remoteAddr: conn.RemoteAddr().String()}
+		m.done = make(chan struct{})
+		m.blockTicker = make(chan bool)
 
-func echoHandler(conn net.Conn) {
-	r := bufio.NewReader(conn)
-	for c := 0; c <= 9; c++ {
-		chr, err := r.ReadByte()
-		if err != nil {
-			log.Println("Error reading byte:", err)
-			break
-		}
-		log.Println("Copying byte:", chr)
-		_, err = conn.Write([]byte{chr})
-		if err != nil {
-			log.Println("Error writing byte:", err)
-			break
-		}
+		// Launch our throughput reporter in a goroutine
+		go m.ReportThroughput()
+
+		// Start our metered copier and block until it finishes
+		m.MeteredCopy(conn, tt)
+
+		// When our metered copy unblocks, the speed test is done, so we close
+		// this channel to signal the throughput reporter to halt
+		close(m.done)
 	}
-	conn.Close()
 }
 
-func outboundHandler(w http.ResponseWriter, r *http.Request) {
-	m := &MeteredServer{remoteAddr: r.RemoteAddr}
-	m.done = make(chan struct{})
-	m.blockTicker = make(chan bool)
-
-	// Launch our throughput reporter in a goroutine
-	go m.ReportThroughput()
-
-	// Create a new randbo Reader
-	rbr := randbo.New()
-
-	// Start our metered copier and block until it finishes
-	m.MeteredCopy(rbr, w, r, Outbound)
-
-	// When our metered copy unblocks, the speed test is done, so we close
-	// this channel to signal the throughput reporter to halt
-	close(m.done)
-}
-
-func inboundHandler(w http.ResponseWriter, r *http.Request) {
-	m := &MeteredServer{remoteAddr: r.RemoteAddr}
-	m.done = make(chan struct{})
-	m.blockTicker = make(chan bool)
-
-	// Launch our throughput reporter in a goroutine
-	go m.ReportThroughput()
-
-	// Create a new randbo Reader
-	rbr := randbo.New()
-
-	// Start our metered copier and block until it finishes
-	m.MeteredCopy(rbr, w, r, Inbound)
-
-	// When our metered copy unblocks, the speed test is done, so we close
-	// this channel to signal the throughput reporter to halt
-	close(m.done)
-}
-
-// MeteredCopy copies from a Reader to a Writer, keeping count of the data it passes
-func (m *MeteredServer) MeteredCopy(r io.Reader, w http.ResponseWriter, req *http.Request, dir FlowDirection) {
+// MeteredCopy copies to or from a net.Conn, keeping count of the data it passes
+func (m *MeteredServer) MeteredCopy(conn net.Conn, dir TestType) {
 	var err error
-
-	// We're going to be sending random, binary data out.
-	w.Header().Set("Content-Type", "application/octet-stream")
 
 	// We'll be running the test for 15 seconds
 	timer := time.NewTimer(time.Second * time.Duration(*testLength))
@@ -150,9 +145,11 @@ func (m *MeteredServer) MeteredCopy(r io.Reader, w http.ResponseWriter, req *htt
 			// Copy our random data from randbo to our ResponseWriter, 100KB at a time
 			switch dir {
 			case Outbound:
-				_, err = io.CopyN(w, r, 1024*blockSize)
+				// Create a new randbo Reader
+				rnd := randbo.New()
+				_, err = io.CopyN(conn, rnd, 1024*blockSize)
 			case Inbound:
-				_, err = io.CopyN(ioutil.Discard, req.Body, 1024*blockSize)
+				_, err = io.CopyN(ioutil.Discard, conn, 1024*blockSize)
 			}
 			if err != nil {
 				log.Println("Error copying:", err)
