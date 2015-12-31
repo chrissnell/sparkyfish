@@ -16,7 +16,7 @@ import (
 const (
 	blockSize        int64  = 100
 	reportIntervalMS uint64 = 500 // report interval in milliseconds
-	testLength       uint   = 15
+	testLength       uint   = 10
 )
 
 // TestType is used to indicate the type of test being performed
@@ -182,7 +182,6 @@ func (m *MeteredServer) ReportThroughput() {
 			// Increment our block counter when we get a ticker
 			blockCount++
 		case <-m.done:
-			log.Println("ReportThroughput() Done")
 			tick.Stop()
 			return
 		case <-tick.C:
