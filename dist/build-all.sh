@@ -19,7 +19,7 @@ do
       rm ${prog}-win64.exe
     else
        OUT="${prog}-${plat}-amd64"
-       GOOS=$p GOARCH=amd64 go build -o $OUT
+       GOOS=$plat GOARCH=amd64 go build -o $OUT
        echo "Compressing..."
        gzip -f $OUT
        mv ${OUT}.gz ../binaries/${prog}/
