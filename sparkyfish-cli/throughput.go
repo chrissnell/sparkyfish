@@ -204,7 +204,7 @@ func (mc *meteredClient) generateStats() {
 					maxDL = currentDL
 				}
 				// Update our stats widget with the latest readings
-				mc.wr.jobs["statsSummary"].(*termui.Par).Text = fmt.Sprintf("DOWNLOAD \nCurrent: %v Mbps\tMax: %v\tAvg: %v\n\nUPLOAD\nCurrent: %v Mbps\tMax: %v\tAvg: %v",
+				mc.wr.jobs["statsSummary"].(*termui.Par).Text = fmt.Sprintf("DOWNLOAD \nCurrent: %v Mbit/s\tMax: %v\tAvg: %v\n\nUPLOAD\nCurrent: %v Mbit/s\tMax: %v\tAvg: %v",
 					strconv.FormatFloat(currentDL, 'f', 1, 64), strconv.FormatFloat(maxDL, 'f', 1, 64), strconv.FormatFloat(avgDL, 'f', 1, 64),
 					strconv.FormatFloat(currentUL, 'f', 1, 64), strconv.FormatFloat(maxUL, 'f', 1, 64), strconv.FormatFloat(avgUL, 'f', 1, 64))
 				mc.wr.Render()
@@ -217,7 +217,7 @@ func (mc *meteredClient) generateStats() {
 					maxUL = currentUL
 				}
 				// Update our stats widget with the latest readings
-				mc.wr.jobs["statsSummary"].(*termui.Par).Text = fmt.Sprintf("DOWNLOAD \nCurrent: %v Mbps\tMax: %v\tAvg: %v\n\nUPLOAD\nCurrent: %v Mbps\tMax: %v\tAvg: %v",
+				mc.wr.jobs["statsSummary"].(*termui.Par).Text = fmt.Sprintf("DOWNLOAD \nCurrent: %v Mbit/s\tMax: %v\tAvg: %v\n\nUPLOAD\nCurrent: %v Mbit/s\tMax: %v\tAvg: %v",
 					strconv.FormatFloat(currentDL, 'f', 1, 64), strconv.FormatFloat(maxDL, 'f', 1, 64), strconv.FormatFloat(avgDL, 'f', 1, 64),
 					strconv.FormatFloat(currentUL, 'f', 1, 64), strconv.FormatFloat(maxUL, 'f', 1, 64), strconv.FormatFloat(avgUL, 'f', 1, 64))
 				mc.wr.Render()

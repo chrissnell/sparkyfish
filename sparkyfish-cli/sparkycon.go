@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	blockSize            int64  = 50  // size (KB) of each block of random data to be sent/rec'd
-	reportIntervalMS     uint64 = 300 // report interval in milliseconds
+	blockSize            int64  = 200 // size (KB) of each block of data copied to/from remote
+	reportIntervalMS     uint64 = 500 // report interval in milliseconds
 	throughputTestLength uint   = 10  // length of time to conduct each throughput test
 	maxPingTestLength    uint   = 10  // maximum time for ping test to complete
 	numPings             int    = 30  // number of pings to attempt
@@ -193,7 +193,7 @@ func (mc *meteredClient) runTestSequence() {
 	statsSummary.Width = 60
 	statsSummary.Y = 17
 	statsSummary.BorderLabel = " Throughput Summary "
-	statsSummary.Text = fmt.Sprintf("DOWNLOAD \nCurrent: -- Mbps\tMax: --\tAvg: --\n\nUPLOAD\nCurrent: -- Mbps\tMax: --\tAvg: --")
+	statsSummary.Text = fmt.Sprintf("DOWNLOAD \nCurrent: -- Mbit/s\tMax: --\tAvg: --\n\nUPLOAD\nCurrent: -- Mbit/s\tMax: --\tAvg: --")
 	statsSummary.TextFgColor = termui.ColorWhite | termui.AttrBold
 
 	// Build out progress gauge widget
