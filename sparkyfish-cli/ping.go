@@ -14,19 +14,21 @@ import (
 
 type pingHistory []int64
 
-func (mc *meteredClient) pingTest() {
+func (sc *sparkyClient) pingTest() {
 	// Reset our progress bar to 0% if it's not there already
-	mc.progressBarReset <- true
+	sc.progressBarReset <- true
 
 	// start our ping processor
-	go mc.pingProcessor()
+	go sc.pingProcessor()
 
 	// Wait for our processor to become ready
-	<-mc.pingProcessorReady
+	<-sc.pingProcessorReady
 
 	buf := make([]byte, 1)
 	conn, err := net.Dial("tcp", os.Args[1])
 	if err != nil {
+		termui.Clear()
+		termui.Close()
 		log.Fatal(err)
 	}
 
@@ -48,17 +50,17 @@ func (mc *meteredClient) pingTest() {
 		}
 		endTime := time.Now()
 
-		mc.pingTime <- endTime.Sub(startTime)
+		sc.pingTime <- endTime.Sub(startTime)
 	}
 
 	// Kill off the progress bar updater and block until it's gone
-	mc.testDone <- true
+	sc.testDone <- true
 
 	return
 }
 
 // pingProcessor recieves the ping times from pingTest and updates the UI
-func (mc *meteredClient) pingProcessor() {
+func (sc *sparkyClient) pingProcessor() {
 	var pingCount int
 	var ptMax, ptMin int
 	var latencyHist pingHistory
@@ -67,14 +69,14 @@ func (mc *meteredClient) pingProcessor() {
 	timeout := time.NewTimer(time.Duration(maxPingTestLength) * time.Second)
 
 	// Signal pingTest() that we're ready
-	close(mc.pingProcessorReady)
+	close(sc.pingProcessorReady)
 
 	for {
 		select {
 		case <-timeout.C:
 			// If we've been pinging for maxPingTestLength, call it quits
 			return
-		case pt := <-mc.pingTime:
+		case pt := <-sc.pingTime:
 			pingCount++
 
 			// Calculate our ping time in microseconds
@@ -86,13 +88,13 @@ func (mc *meteredClient) pingProcessor() {
 			ptMin, ptMax = latencyHist.minMax()
 
 			// Advance the progress bar a bit
-			mc.pingProgressTicker <- true
+			sc.pingProgressTicker <- true
 
 			// Update the ping stats widget
-			mc.wr.jobs["latency"].(*termui.Sparklines).Lines[0].Data = latencyHist.toMilli()
-			mc.wr.jobs["latencystats"].(*termui.Par).Text = fmt.Sprintf("Cur/Min/Max\n%.2f/%.2f/%.2f ms\nAvg/σ\n%.2f/%.2f ms",
+			sc.wr.jobs["latency"].(*termui.Sparklines).Lines[0].Data = latencyHist.toMilli()
+			sc.wr.jobs["latencystats"].(*termui.Par).Text = fmt.Sprintf("Cur/Min/Max\n%.2f/%.2f/%.2f ms\nAvg/σ\n%.2f/%.2f ms",
 				float64(ptMicro/1000), float64(ptMin/1000), float64(ptMax/1000), latencyHist.mean()/1000, latencyHist.stdDev()/1000)
-			mc.wr.Render()
+			sc.wr.Render()
 		}
 	}
 }

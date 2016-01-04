@@ -28,7 +28,7 @@ const (
 	echo                     // echo (ping) test
 )
 
-type meteredClient struct {
+type sparkyClient struct {
 	pingTime           chan time.Duration
 	blockTicker        chan bool
 	pingProgressTicker chan bool
@@ -78,44 +78,44 @@ func main() {
 		termui.StopLoop()
 	})
 
-	mc := newMeteredClient()
-	mc.prepareChannels()
+	sc := newsparkyClient()
+	sc.prepareChannels()
 
-	mc.wr = newwidgetRenderer()
+	sc.wr = newwidgetRenderer()
 
 	// Begin our tests
-	go mc.runTestSequence()
+	go sc.runTestSequence()
 
 	termui.Loop()
 }
 
-// NewMeteredClient creates a new MeteredClient object
-func newMeteredClient() *meteredClient {
-	m := meteredClient{}
+// NewsparkyClient creates a new sparkyClient object
+func newsparkyClient() *sparkyClient {
+	m := sparkyClient{}
 	return &m
 }
 
-func (mc *meteredClient) prepareChannels() {
+func (sc *sparkyClient) prepareChannels() {
 
 	// Prepare some channels that we'll use for measuring
 	// throughput and latency
-	mc.blockTicker = make(chan bool)
-	mc.throughputReport = make(chan float64)
-	mc.pingTime = make(chan time.Duration, 10)
-	mc.pingProgressTicker = make(chan bool, numPings)
+	sc.blockTicker = make(chan bool)
+	sc.throughputReport = make(chan float64)
+	sc.pingTime = make(chan time.Duration, 10)
+	sc.pingProgressTicker = make(chan bool, numPings)
 
 	// Prepare some channels that we'll use to signal
 	// various state changes in the testing process
-	mc.pingProcessorReady = make(chan struct{})
-	mc.changeToUpload = make(chan struct{})
-	mc.statsGeneratorDone = make(chan struct{})
-	mc.testDone = make(chan bool)
-	mc.progressBarReset = make(chan bool)
-	mc.allTestsDone = make(chan struct{})
+	sc.pingProcessorReady = make(chan struct{})
+	sc.changeToUpload = make(chan struct{})
+	sc.statsGeneratorDone = make(chan struct{})
+	sc.testDone = make(chan bool)
+	sc.progressBarReset = make(chan bool)
+	sc.allTestsDone = make(chan struct{})
 
 }
 
-func (mc *meteredClient) runTestSequence() {
+func (sc *sparkyClient) runTestSequence() {
 	// First, we need to build the widgets on our screen.
 
 	// Build our title box
@@ -222,51 +222,51 @@ func (mc *meteredClient) runTestSequence() {
 	helpBox.Bg = termui.ColorBlue
 
 	// Add the widgets to the rendering jobs and render the screen
-	mc.wr.Add("titlebox", titleBox)
-	mc.wr.Add("dlgraph", dlGraph)
-	mc.wr.Add("ulgraph", ulGraph)
-	mc.wr.Add("latency", latencyGroup)
-	mc.wr.Add("latencytitle", latencyTitle)
-	mc.wr.Add("latencystats", latencyStats)
-	mc.wr.Add("statsSummary", statsSummary)
-	mc.wr.Add("progress", progress)
-	mc.wr.Add("helpbox", helpBox)
-	mc.wr.Render()
+	sc.wr.Add("titlebox", titleBox)
+	sc.wr.Add("dlgraph", dlGraph)
+	sc.wr.Add("ulgraph", ulGraph)
+	sc.wr.Add("latency", latencyGroup)
+	sc.wr.Add("latencytitle", latencyTitle)
+	sc.wr.Add("latencystats", latencyStats)
+	sc.wr.Add("statsSummary", statsSummary)
+	sc.wr.Add("progress", progress)
+	sc.wr.Add("helpbox", helpBox)
+	sc.wr.Render()
 
 	// Launch a progress bar updater
-	go mc.updateProgressBar()
+	go sc.updateProgressBar()
 
 	// Start our ping test and block until it's complete
-	mc.pingTest()
+	sc.pingTest()
 
 	// Start our stats generator, which receives realtime measurements from the throughput
 	// reporter and generates metrics from them
-	go mc.generateStats()
+	go sc.generateStats()
 
 	// Run our download tests and block until that's done
-	mc.runThroughputTest(inbound)
+	sc.runThroughputTest(inbound)
 
 	// Signal to our MeasureThroughput that we're about to begin the upload test
-	close(mc.changeToUpload)
+	close(sc.changeToUpload)
 
 	// Run an outbound (upload) throughput test and block until it's complete
-	mc.runThroughputTest(outbound)
+	sc.runThroughputTest(outbound)
 
 	// Signal to our generators that the upload test is complete
-	close(mc.statsGeneratorDone)
+	close(sc.statsGeneratorDone)
 
 	// Notify the progress bar updater to change the bar color to green
-	close(mc.allTestsDone)
+	close(sc.allTestsDone)
 
 	return
 }
 
 // updateProgressBar updates the progress bar as tests run
-func (mc *meteredClient) updateProgressBar() {
+func (sc *sparkyClient) updateProgressBar() {
 	var updateIntervalMS uint = 500
 	var progress uint
 
-	mc.wr.jobs["progress"].(*termui.Gauge).BarColor = termui.ColorRed
+	sc.wr.jobs["progress"].(*termui.Gauge).BarColor = termui.ColorRed
 
 	//progressPerUpdate := throughputTestLength / (updateIntervalMS / 1000)
 	var progressPerUpdate uint = 100 / 20
@@ -282,35 +282,35 @@ func (mc *meteredClient) updateProgressBar() {
 			if progress > 100 {
 				progress = 100
 			}
-			mc.wr.jobs["progress"].(*termui.Gauge).Percent = int(progress)
-			mc.wr.Render()
+			sc.wr.jobs["progress"].(*termui.Gauge).Percent = int(progress)
+			sc.wr.Render()
 
-		case <-mc.pingProgressTicker:
+		case <-sc.pingProgressTicker:
 			// Update as each ping comes back, but never beyond 100%
 			progress = progress + uint(100/numPings)
 			if progress > 100 {
 				progress = 100
 			}
-			mc.wr.jobs["progress"].(*termui.Gauge).Percent = int(progress)
-			mc.wr.Render()
+			sc.wr.jobs["progress"].(*termui.Gauge).Percent = int(progress)
+			sc.wr.Render()
 
 			// No need to render, since it's already happening with each ping
-		case <-mc.testDone:
+		case <-sc.testDone:
 			// As each test completes, we set the progress bar to 100% completion.
 			// It will be reset to 0% at the start of the next test.
-			mc.wr.jobs["progress"].(*termui.Gauge).Percent = 100
-			mc.wr.Render()
-		case <-mc.progressBarReset:
+			sc.wr.jobs["progress"].(*termui.Gauge).Percent = 100
+			sc.wr.Render()
+		case <-sc.progressBarReset:
 			// Reset our progress tracker
 			progress = 0
 			// Reset the progress bar
-			mc.wr.jobs["progress"].(*termui.Gauge).Percent = 0
-			mc.wr.Render()
-		case <-mc.allTestsDone:
+			sc.wr.jobs["progress"].(*termui.Gauge).Percent = 0
+			sc.wr.Render()
+		case <-sc.allTestsDone:
 			// Make sure that our progress bar always ends at 100%.  :)
-			mc.wr.jobs["progress"].(*termui.Gauge).Percent = 100
-			mc.wr.jobs["progress"].(*termui.Gauge).BarColor = termui.ColorGreen
-			mc.wr.Render()
+			sc.wr.jobs["progress"].(*termui.Gauge).Percent = 100
+			sc.wr.jobs["progress"].(*termui.Gauge).BarColor = termui.ColorGreen
+			sc.wr.Render()
 			return
 		}
 	}
