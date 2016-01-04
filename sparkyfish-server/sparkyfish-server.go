@@ -116,7 +116,7 @@ func handler(conn net.Conn) {
 		// Start an upload/download test
 		ss := NewSparkyServer(conn.RemoteAddr().String())
 		ss.done = make(chan struct{})
-		ss.blockTicker = make(chan bool)
+		ss.blockTicker = make(chan bool, 200)
 
 		// Launch our throughput reporter in a goroutine
 		go ss.ReportThroughput()
