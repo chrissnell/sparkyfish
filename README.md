@@ -11,7 +11,7 @@ Sparkyfish offers several advantages over speedtest.net and its unofficial clien
 * You can test speeds > 1 Gbps if your server and client hosts support them.  Most speedtest.net test servers don't have this capacity.
 * Sparkyfish comes with a colorful console-based client that runs on *nix and Windows
 * Sparkyfish results are less likely to be influenced by ISP's traffic prioritization.  ISPs have been known to give speedtest.net traffic priority in order to artificially improve their users' test results.  [Even though T-Mobile may be throttling your network connection, they purposely don't throttle speedtest.net](https://www.techdirt.com/blog/netneutrality/articles/20141124/14064729242/fcc-gives-t-mobile-talking-to-exempting-speedtests-caps-preventing-users-seeing-theyd-been-throttled.shtml), which may be giving you an inaccurate view of your actual speeds.  Since sparkyfish uses its own proprietary ports and tests with randomly-generated data, it's less likely to be throttled/unthrottled (for now).
-* 
+* Sparkyfish uses an open protocol for testing.  You're welcome to implement your own front-end client!
 
 # Sparkyfish CLI
 ## Installation
