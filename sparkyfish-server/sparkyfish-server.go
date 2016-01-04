@@ -13,10 +13,14 @@ import (
 	"github.com/dustin/randbo"
 )
 
+var debug *bool
+
 const (
-	blockSize        int64  = 100
-	reportIntervalMS uint64 = 500 // report interval in milliseconds
-	testLength       uint   = 10
+	blockSize        int64  = 200  // size of each block copied to/from remote
+	reportIntervalMS uint64 = 1000 // report interval in milliseconds
+	testLength       uint   = 10   // length of throughput tests (sec)
+	pingTestLength   int    = 30   // number of pings allowed in a ping test
+
 )
 
 // TestType is used to indicate the type of test being performed
@@ -28,19 +32,16 @@ const (
 	Echo
 )
 
-// MeteredServer is a server that deliveres random data to the client and measures
-// the throughput
-type MeteredServer struct {
+// sparkyServer handles requests for throughput and latency tests
+type sparkyServer struct {
 	blockTicker chan bool
 	done        chan struct{}
 	remoteAddr  string
 }
 
-func main() {
-	listenAddr := flag.String("listen-addr", "0.0.0.0:7121", "IP address to listen on for speed tests (default: 0.0.0.0:7121)")
-	flag.Parse()
-
-	startListener(*listenAddr)
+func NewSparkyServer(remoteAddr string) *sparkyServer {
+	ss := &sparkyServer{remoteAddr: remoteAddr}
+	return ss
 }
 
 func startListener(listenAddr string) {
@@ -75,7 +76,9 @@ func handler(conn net.Conn) {
 	if err != nil {
 		log.Println("error reading from remote:", conn)
 	}
-	log.Println("COMMAND RECEIVED:", string(cmd))
+	if *debug {
+		log.Println("COMMAND RECEIVED:", string(cmd))
+	}
 
 	switch {
 	case bytes.Compare(cmd, cmdSND) == 0:
@@ -93,13 +96,15 @@ func handler(conn net.Conn) {
 	if tt == Echo {
 		// Start an echo/ping test
 		r := bufio.NewReader(conn)
-		for c := 0; c <= 9; c++ {
+		for c := 0; c <= pingTestLength-1; c++ {
 			chr, err := r.ReadByte()
 			if err != nil {
 				log.Println("Error reading byte:", err)
 				break
 			}
-			log.Println("Copying byte:", chr)
+			if *debug {
+				log.Println("Copying byte:", chr)
+			}
 			_, err = conn.Write([]byte{chr})
 			if err != nil {
 				log.Println("Error writing byte:", err)
@@ -109,24 +114,24 @@ func handler(conn net.Conn) {
 		return
 	} else {
 		// Start an upload/download test
-		m := &MeteredServer{remoteAddr: conn.RemoteAddr().String()}
-		m.done = make(chan struct{})
-		m.blockTicker = make(chan bool)
+		ss := NewSparkyServer(conn.RemoteAddr().String())
+		ss.done = make(chan struct{})
+		ss.blockTicker = make(chan bool)
 
 		// Launch our throughput reporter in a goroutine
-		go m.ReportThroughput()
+		go ss.ReportThroughput()
 
 		// Start our metered copier and block until it finishes
-		m.MeteredCopy(conn, tt)
+		ss.MeteredCopy(conn, tt)
 
 		// When our metered copy unblocks, the speed test is done, so we close
 		// this channel to signal the throughput reporter to halt
-		close(m.done)
+		close(ss.done)
 	}
 }
 
 // MeteredCopy copies to or from a net.Conn, keeping count of the data it passes
-func (m *MeteredServer) MeteredCopy(conn net.Conn, dir TestType) {
+func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
 	var err error
 	var timer *time.Timer
 
@@ -144,7 +149,9 @@ func (m *MeteredServer) MeteredCopy(conn net.Conn, dir TestType) {
 	for {
 		select {
 		case <-timer.C:
-			log.Println(testLength, "seconds have elapsed.")
+			if *debug {
+				log.Println(testLength, "seconds have elapsed.")
+			}
 			return
 		default:
 			// Copy our random data from randbo to our ResponseWriter, 100KB at a time
@@ -155,40 +162,49 @@ func (m *MeteredServer) MeteredCopy(conn net.Conn, dir TestType) {
 				_, err = io.CopyN(ioutil.Discard, conn, 1024*blockSize)
 			}
 
+			// io.EOF is normal when a client drops off after the test
 			if err != nil {
-				if err == io.EOF {
-					return
-				} else {
+				if err != io.EOF {
 					log.Println("Error copying:", err)
-					return
 				}
+				return
 			}
 
 			// // With each 100K copied, we send a message on our blockTicker channel
-			m.blockTicker <- true
+			ss.blockTicker <- true
 		}
 	}
 	return
 }
 
 // ReportThroughput reports on throughput of data passed by MeterWrite
-func (m *MeteredServer) ReportThroughput() {
+func (ss *sparkyServer) ReportThroughput() {
 	var blockCount, prevBlockCount uint64
 
 	tick := time.NewTicker(time.Duration(reportIntervalMS) * time.Millisecond)
 	for {
 		select {
-		case <-m.blockTicker:
+		case <-ss.blockTicker:
 			// Increment our block counter when we get a ticker
 			blockCount++
-		case <-m.done:
+		case <-ss.done:
 			tick.Stop()
 			return
 		case <-tick.C:
 			// Every second, we calculate how many blocks were received
 			// and derive an average throughput rate.
-			log.Printf("[%v] %v Kb/sec", m.remoteAddr, (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
+			if *debug {
+				log.Printf("[%v] %v Kb/sec", ss.remoteAddr, (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
+			}
 			prevBlockCount = blockCount
 		}
 	}
+}
+
+func main() {
+	listenAddr := flag.String("listen-addr", "0.0.0.0:7121", "IP address to listen on for speed tests (default: 0.0.0.0:7121)")
+	debug = flag.Bool("debug", false, "Print debugging information to stdout")
+	flag.Parse()
+
+	startListener(*listenAddr)
 }
