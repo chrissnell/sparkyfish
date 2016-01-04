@@ -8,7 +8,7 @@ The easiest way to use a public server is to use the round-robin hostname/port: 
 
 | Hostname | Location | Sponsor| ISP| Link Capacity | Protocol |
 |----------|----------|-----|----|-----------|----------|
-| us-seattle.sparkyfish.chrissnell.com:7121| Seattle, WA | [Nigel VH](https://www.blueboxcloud.com/) | Blue Host | 150 Mbps up/down| IPv4 + IPv6 |
+| us-seattle.sparkyfish.chrissnell.com:7121| Seattle, WA | [Nigel VH](https://www.blueboxcloud.comBox | 150 Mbps up/down| IPv4 + IPv6 |
 | us-dallas.sparkyfish.chrissnell.com:7121| Dallas, TX | [Marler Media](http://marlermedia.com/Home.html) |Linode| 100 Mbps up/down| IPv4 + IPv6|
 # Host a Public Server
 If you're willing to help us out and host a public server, please add yourself to this page and submit a PR and we'll get you added.
