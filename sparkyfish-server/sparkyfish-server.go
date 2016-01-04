@@ -217,7 +217,7 @@ blockcounter:
 }
 
 func main() {
-	listenAddr := flag.String("listen-addr", "0.0.0.0:7121", "IP address to listen on for speed tests (default: 0.0.0.0:7121)")
+	listenAddr := flag.String("listen-addr", ":7121", "IP:Port to listen on for speed tests (default: all IPs, port 7121)")
 	debug = flag.Bool("debug", false, "Print debugging information to stdout")
 	flag.Parse()
 
