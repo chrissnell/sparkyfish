@@ -26,7 +26,7 @@ Run the client like this:
 
 The client takes only one parameter.  The IP:port of the sparkyfish server.  You can use our public server round-robin to try it out:  ```us.sparkyfish.chrissnell.com:7121```
 
-For more info on the public sparkyfish servers, see docs/PUBLIC-SERVERS.md.
+For more info on the public sparkyfish servers, see [docs/PUBLIC-SERVERS.md](docs/PUBLIC-SERVERS.md).
 
 ## Building from source (optional)
 If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
