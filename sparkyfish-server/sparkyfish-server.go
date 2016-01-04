@@ -83,10 +83,13 @@ func handler(conn net.Conn) {
 	switch {
 	case bytes.Compare(cmd, cmdSND) == 0:
 		tt = Outbound
+		log.Printf("[%v] initiated download test", conn.RemoteAddr())
 	case bytes.Compare(cmd, cmdRCV) == 0:
 		tt = Inbound
+		log.Printf("[%v] initiated upload test", conn.RemoteAddr())
 	case bytes.Compare(cmd, cmdECO) == 0:
 		tt = Echo
+		log.Printf("[%v] initiated echo test", conn.RemoteAddr())
 	default:
 		// If the client didn't send a SND or RCV command, close the connection
 		conn.Close()
@@ -119,7 +122,7 @@ func handler(conn net.Conn) {
 		ss.blockTicker = make(chan bool, 200)
 
 		// Launch our throughput reporter in a goroutine
-		go ss.ReportThroughput()
+		go ss.ReportThroughput(tt)
 
 		// Start our metered copier and block until it finishes
 		ss.MeteredCopy(conn, tt)
@@ -178,10 +181,14 @@ func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
 }
 
 // ReportThroughput reports on throughput of data passed by MeterWrite
-func (ss *sparkyServer) ReportThroughput() {
+func (ss *sparkyServer) ReportThroughput(tt TestType) {
 	var blockCount, prevBlockCount uint64
 
 	tick := time.NewTicker(time.Duration(reportIntervalMS) * time.Millisecond)
+
+	start := time.Now()
+
+blockcounter:
 	for {
 		select {
 		case <-ss.blockTicker:
@@ -189,15 +196,23 @@ func (ss *sparkyServer) ReportThroughput() {
 			blockCount++
 		case <-ss.done:
 			tick.Stop()
-			return
+			break blockcounter
 		case <-tick.C:
 			// Every second, we calculate how many blocks were received
 			// and derive an average throughput rate.
 			if *debug {
-				log.Printf("[%v] %v Kb/sec", ss.remoteAddr, (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
+				log.Printf("[%v] %v Kbit/sec", ss.remoteAddr, (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
 			}
 			prevBlockCount = blockCount
 		}
+	}
+
+	mbCopied := float64(blockCount * uint64(blockSize) / 1000)
+	duration := time.Now().Sub(start).Seconds()
+	if tt == Outbound {
+		log.Printf("[%v] Sent %v MB in %.2f seconds (%.2f Mbit/s)", ss.remoteAddr, mbCopied, duration, (mbCopied/duration)*8)
+	} else if tt == Inbound {
+		log.Printf("[%v] Recd %v MB in %.2f seconds (%.2f) Mbit/s", ss.remoteAddr, mbCopied, duration, (mbCopied/duration)*8)
 	}
 }
 
