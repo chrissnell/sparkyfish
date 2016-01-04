@@ -6,11 +6,10 @@ not be suitable for testing your machine if you have a connection that's faster 
 # Current Public Servers
 The easiest way to use a public server is to use the round-robin hostname:  ```us.sparkyfish.chrissnell.com```.
 
-| Hostname | Location | Host| Link Capacity |
-|----------|----------|-----|---------------|
-| us-seattle.sparkyfish.chrissnell.com| Seattle, WA | [Blue Box](https://www.blueboxcloud.com/) | 150 Mbps up/down|
-| us-dallas.sparkyfish.chrissnell.com| Dallas, TX | [Marler Media](http://marlermedia.com/Home.html) | 100 Mbps up/down|
-
+| Hostname | Location | Host| Link Capacity | Protocol |
+|----------|----------|-----|---------------|----------|
+| us-seattle.sparkyfish.chrissnell.com| Seattle, WA | [Blue Box](https://www.blueboxcloud.com/) | 150 Mbps up/down| IPv4 + IPv6 |
+| us-dallas.sparkyfish.chrissnell.com| Dallas, TX | [Marler Media](http://marlermedia.com/Home.html) | 100 Mbps up/down| IPv4|
 # Host a Public Server
 If you're willing to help us out and host a public server, please add yourself to this page and submit a PR and we'll get you added.
 If you have questions or need help, hop on #sparkyfish on Freenode IRC and we'll help you out.
