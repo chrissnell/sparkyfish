@@ -99,7 +99,7 @@ func (sc *sparkyClient) prepareChannels() {
 
 	// Prepare some channels that we'll use for measuring
 	// throughput and latency
-	sc.blockTicker = make(chan bool)
+	sc.blockTicker = make(chan bool, 200)
 	sc.throughputReport = make(chan float64)
 	sc.pingTime = make(chan time.Duration, 10)
 	sc.pingProgressTicker = make(chan bool, numPings)
