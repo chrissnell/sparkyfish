@@ -1,1 +1,4 @@
-sparkyfish
+binaries/*
+dist/upload-to-server.sh
+sparkyfish-server/sparkyfish-server
+sparkyfish-cli/sparkyfish-cli
