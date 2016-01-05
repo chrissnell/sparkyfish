@@ -28,21 +28,22 @@ const (
 type TestType int
 
 const (
-	Outbound TestType = iota
-	Inbound
-	Echo
+	outbound TestType = iota
+	inbound
+	echo
 )
 
 // sparkyServer handles requests for throughput and latency tests
 type sparkyServer struct {
 	client      net.Conn
+	testType    TestType
+	reader      *bufio.Reader
 	blockTicker chan bool
 	done        chan bool
-	remoteAddr  string
 }
 
-func newSparkyServer(remoteAddr string) sparkyServer {
-	ss := sparkyServer{remoteAddr: remoteAddr}
+func newSparkyServer(client net.Conn) sparkyServer {
+	ss := sparkyServer{client: client}
 	return ss
 }
 
@@ -64,16 +65,22 @@ func startListener(listenAddr string) {
 }
 
 func handler(conn net.Conn) {
-	var tt TestType
 	var version uint64
 
-	defer conn.Close()
+	ss := newSparkyServer(conn)
 
-	reader := bufio.NewReader(conn)
+	ss.done = make(chan bool)
+	ss.blockTicker = make(chan bool, 200)
 
-	helo, err := reader.ReadString('\n')
+	defer ss.client.Close()
+
+	ss.reader = bufio.NewReader(ss.client)
+
+	// Every connection begins with a HELO<version> command,
+	// where <version> is one byte that will be converted to a uint16
+	helo, err := ss.reader.ReadString('\n')
 	if err != nil {
-		log.Println("error reading from remote:", conn)
+		log.Println("error reading from remote:", err)
 	}
 	if *debug {
 		log.Println("COMMAND RECEIVED:", helo[:len(helo)-2])
@@ -88,23 +95,23 @@ func handler(conn net.Conn) {
 			}
 			log.Printf("HELO received.  Version: %#x", version)
 			if uint16(version) > protocolVersion {
-				conn.Write([]byte("ERR:Protocol version not supported\n"))
+				ss.client.Write([]byte("ERR:Protocol version not supported\n"))
 				log.Println("Invalid protocol version requested", version)
 				return
 			}
 
 		} else {
-			conn.Write([]byte("ERR:Invalid HELO received\n"))
+			ss.client.Write([]byte("ERR:Invalid HELO received\n"))
 			return
 		}
 	} else {
-		conn.Write([]byte("ERR:Invalid HELO received\n"))
+		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
 		return
 	}
 
-	cmd, err := reader.ReadString('\n')
+	cmd, err := ss.reader.ReadString('\n')
 	if err != nil {
-		log.Println("error reading from remote:", conn)
+		log.Println("error reading from remote:", err)
 		return
 	}
 	if *debug {
@@ -112,54 +119,36 @@ func handler(conn net.Conn) {
 	}
 
 	if len(cmd) < 4 {
-		conn.Write([]byte("ERR:Invalid command received\n"))
+		ss.client.Write([]byte("ERR:Invalid command received\n"))
 		return
 	}
 
 	switch string(cmd[:3]) {
 	case "SND":
-		tt = Outbound
-		log.Printf("[%v] initiated download test", conn.RemoteAddr())
+		ss.testType = outbound
+		log.Printf("[%v] initiated download test", ss.client.RemoteAddr())
 	case "RCV":
-		tt = Inbound
-		log.Printf("[%v] initiated upload test", conn.RemoteAddr())
+		ss.testType = inbound
+		log.Printf("[%v] initiated upload test", ss.client.RemoteAddr())
 	case "ECO":
-		tt = Echo
-		log.Printf("[%v] initiated echo test", conn.RemoteAddr())
+		ss.testType = echo
+		log.Printf("[%v] initiated echo test", ss.client.RemoteAddr())
 	default:
-		conn.Write([]byte("ERR:Invalid command received"))
+		ss.client.Write([]byte("ERR:Invalid command received"))
 		return
 	}
 
-	if tt == Echo {
-		// Start an echo/ping test
-		for c := 0; c <= pingTestLength-1; c++ {
-			chr, err := reader.ReadByte()
-			if err != nil {
-				log.Println("Error reading byte:", err)
-				break
-			}
-			if *debug {
-				log.Println("Copying byte:", chr)
-			}
-			_, err = conn.Write([]byte{chr})
-			if err != nil {
-				log.Println("Error writing byte:", err)
-				break
-			}
-		}
-		return
+	if ss.testType == echo {
+		// Start an echo/ping test and block until it finishes
+		ss.echoTest()
 	} else {
 		// Start an upload/download test
-		ss := newSparkyServer(conn.RemoteAddr().String())
-		ss.done = make(chan bool)
-		ss.blockTicker = make(chan bool, 200)
 
 		// Launch our throughput reporter in a goroutine
-		go ss.ReportThroughput(tt)
+		go ss.ReportThroughput()
 
 		// Start our metered copier and block until it finishes
-		ss.MeteredCopy(conn, tt)
+		ss.MeteredCopy()
 
 		// When our metered copy unblocks, the speed test is done, so we close
 		// this channel to signal the throughput reporter to halt
@@ -167,16 +156,35 @@ func handler(conn net.Conn) {
 	}
 }
 
+func (ss *sparkyServer) echoTest() {
+	for c := 0; c <= pingTestLength-1; c++ {
+		chr, err := ss.reader.ReadByte()
+		if err != nil {
+			log.Println("Error reading byte:", err)
+			break
+		}
+		if *debug {
+			log.Println("Copying byte:", chr)
+		}
+		_, err = ss.client.Write([]byte{chr})
+		if err != nil {
+			log.Println("Error writing byte:", err)
+			break
+		}
+	}
+	return
+}
+
 // MeteredCopy copies to or from a net.Conn, keeping count of the data it passes
-func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
+func (ss *sparkyServer) MeteredCopy() {
 	var err error
 	var timer *time.Timer
 
 	// Set a timer that we'll use to stop the test.  If we're running an inbound test,
 	// we extend the timer by two seconds to allow the client to finish its sending.
-	if dir == Inbound {
+	if ss.testType == inbound {
 		timer = time.NewTimer(time.Second * time.Duration(testLength+2))
-	} else if dir == Outbound {
+	} else if ss.testType == outbound {
 		timer = time.NewTimer(time.Second * time.Duration(testLength))
 	}
 
@@ -192,11 +200,11 @@ func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
 			return
 		default:
 			// Copy our random data from randbo to our ResponseWriter, 100KB at a time
-			switch dir {
-			case Outbound:
-				_, err = io.CopyN(conn, rnd, 1024*blockSize)
-			case Inbound:
-				_, err = io.CopyN(ioutil.Discard, conn, 1024*blockSize)
+			switch ss.testType {
+			case outbound:
+				_, err = io.CopyN(ss.client, rnd, 1024*blockSize)
+			case inbound:
+				_, err = io.CopyN(ioutil.Discard, ss.client, 1024*blockSize)
 			}
 
 			// io.EOF is normal when a client drops off after the test
@@ -214,7 +222,7 @@ func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
 }
 
 // ReportThroughput reports on throughput of data passed by MeterWrite
-func (ss *sparkyServer) ReportThroughput(tt TestType) {
+func (ss *sparkyServer) ReportThroughput() {
 	var blockCount, prevBlockCount uint64
 
 	tick := time.NewTicker(time.Duration(reportIntervalMS) * time.Millisecond)
@@ -234,7 +242,7 @@ blockcounter:
 			// Every second, we calculate how many blocks were received
 			// and derive an average throughput rate.
 			if *debug {
-				log.Printf("[%v] %v Kbit/sec", ss.remoteAddr, (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
+				log.Printf("[%v] %v Kbit/sec", ss.client.RemoteAddr(), (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
 			}
 			prevBlockCount = blockCount
 		}
@@ -242,10 +250,10 @@ blockcounter:
 
 	mbCopied := float64(blockCount * uint64(blockSize) / 1000)
 	duration := time.Now().Sub(start).Seconds()
-	if tt == Outbound {
-		log.Printf("[%v] Sent %v MB in %.2f seconds (%.2f Mbit/s)", ss.remoteAddr, mbCopied, duration, (mbCopied/duration)*8)
-	} else if tt == Inbound {
-		log.Printf("[%v] Recd %v MB in %.2f seconds (%.2f) Mbit/s", ss.remoteAddr, mbCopied, duration, (mbCopied/duration)*8)
+	if ss.testType == outbound {
+		log.Printf("[%v] Sent %v MB in %.2f seconds (%.2f Mbit/s)", ss.client.RemoteAddr(), mbCopied, duration, (mbCopied/duration)*8)
+	} else if ss.testType == inbound {
+		log.Printf("[%v] Recd %v MB in %.2f seconds (%.2f) Mbit/s", ss.client.RemoteAddr(), mbCopied, duration, (mbCopied/duration)*8)
 	}
 }
 
