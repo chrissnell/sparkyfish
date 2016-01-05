@@ -93,7 +93,11 @@ func handler(conn net.Conn) {
 				log.Println("error parsing version", err)
 				return
 			}
-			log.Printf("HELO received.  Version: %#x", version)
+
+			if *debug {
+				log.Printf("HELO received.  Version: %#x", version)
+			}
+
 			if uint16(version) > protocolVersion {
 				ss.client.Write([]byte("ERR:Protocol version not supported\n"))
 				log.Println("Invalid protocol version requested", version)
