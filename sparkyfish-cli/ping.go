@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"net"
-	"os"
 	"sort"
 	"time"
 
@@ -25,16 +23,13 @@ func (sc *sparkyClient) pingTest() {
 	<-sc.pingProcessorReady
 
 	buf := make([]byte, 1)
-	conn, err := net.Dial("tcp", os.Args[1])
-	if err != nil {
-		termui.Clear()
-		termui.Close()
-		log.Fatal(err)
-	}
+
+	sc.beginSession()
+	defer sc.conn.Close()
 
 	// Send the ECO command to the remote server, requesting an echo test
 	// (remote receives and echoes back).
-	_, err = conn.Write([]byte("ECO"))
+	err := sc.writeCommand("ECO")
 	if err != nil {
 		termui.Close()
 		log.Fatalln(err)
@@ -42,9 +37,9 @@ func (sc *sparkyClient) pingTest() {
 
 	for c := 0; c <= numPings-1; c++ {
 		startTime := time.Now()
-		conn.Write([]byte{46})
+		sc.conn.Write([]byte{46})
 
-		_, err = conn.Read(buf)
+		_, err = sc.conn.Read(buf)
 		if err != nil {
 			log.Fatal(err)
 		}

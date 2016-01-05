@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"flag"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/dustin/randbo"
@@ -16,6 +16,7 @@ import (
 var debug *bool
 
 const (
+	protocolVersion  uint16 = 0x00 // The latest version of the sparkyfish protocol supported
 	blockSize        int64  = 200  // size of each block copied to/from remote
 	reportIntervalMS uint64 = 1000 // report interval in milliseconds
 	testLength       uint   = 10   // length of throughput tests (sec)
@@ -34,13 +35,14 @@ const (
 
 // sparkyServer handles requests for throughput and latency tests
 type sparkyServer struct {
+	client      net.Conn
 	blockTicker chan bool
-	done        chan struct{}
+	done        chan bool
 	remoteAddr  string
 }
 
-func NewSparkyServer(remoteAddr string) *sparkyServer {
-	ss := &sparkyServer{remoteAddr: remoteAddr}
+func newSparkyServer(remoteAddr string) sparkyServer {
+	ss := sparkyServer{remoteAddr: remoteAddr}
 	return ss
 }
 
@@ -62,45 +64,77 @@ func startListener(listenAddr string) {
 }
 
 func handler(conn net.Conn) {
-	defer conn.Close()
 	var tt TestType
+	var version uint64
 
-	// Valid client commands, issued upon successful connection
-	cmdSND := []byte{'S', 'N', 'D'} // server->client speed test (download)
-	cmdRCV := []byte{'R', 'C', 'V'} // client->server speed test (upload)
-	cmdECO := []byte{'E', 'C', 'O'} // ping/echo test
+	defer conn.Close()
 
-	// Read a 3-byte command from the client
-	cmd := make([]byte, 3, 3)
-	_, err := conn.Read(cmd)
+	reader := bufio.NewReader(conn)
+
+	helo, err := reader.ReadString('\n')
 	if err != nil {
 		log.Println("error reading from remote:", conn)
+	}
+	if *debug {
+		log.Println("COMMAND RECEIVED:", helo[:len(helo)-2])
+	}
+
+	if len(helo) == 7 {
+		if helo[:4] == "HELO" {
+			version, err = strconv.ParseUint(helo[4:5], 10, 16)
+			if err != nil {
+				log.Println("error parsing version", err)
+				return
+			}
+			log.Printf("HELO received.  Version: %#x", version)
+			if uint16(version) > protocolVersion {
+				conn.Write([]byte("ERR:Protocol version not supported\n"))
+				log.Println("Invalid protocol version requested", version)
+				return
+			}
+
+		} else {
+			conn.Write([]byte("ERR:Invalid HELO received\n"))
+			return
+		}
+	} else {
+		conn.Write([]byte("ERR:Invalid HELO received\n"))
+		return
+	}
+
+	cmd, err := reader.ReadString('\n')
+	if err != nil {
+		log.Println("error reading from remote:", conn)
+		return
 	}
 	if *debug {
 		log.Println("COMMAND RECEIVED:", string(cmd))
 	}
 
-	switch {
-	case bytes.Compare(cmd, cmdSND) == 0:
+	if len(cmd) < 4 {
+		conn.Write([]byte("ERR:Invalid command received\n"))
+		return
+	}
+
+	switch string(cmd[:3]) {
+	case "SND":
 		tt = Outbound
 		log.Printf("[%v] initiated download test", conn.RemoteAddr())
-	case bytes.Compare(cmd, cmdRCV) == 0:
+	case "RCV":
 		tt = Inbound
 		log.Printf("[%v] initiated upload test", conn.RemoteAddr())
-	case bytes.Compare(cmd, cmdECO) == 0:
+	case "ECO":
 		tt = Echo
 		log.Printf("[%v] initiated echo test", conn.RemoteAddr())
 	default:
-		// If the client didn't send a SND or RCV command, close the connection
-		conn.Close()
+		conn.Write([]byte("ERR:Invalid command received"))
 		return
 	}
 
 	if tt == Echo {
 		// Start an echo/ping test
-		r := bufio.NewReader(conn)
 		for c := 0; c <= pingTestLength-1; c++ {
-			chr, err := r.ReadByte()
+			chr, err := reader.ReadByte()
 			if err != nil {
 				log.Println("Error reading byte:", err)
 				break
@@ -117,8 +151,8 @@ func handler(conn net.Conn) {
 		return
 	} else {
 		// Start an upload/download test
-		ss := NewSparkyServer(conn.RemoteAddr().String())
-		ss.done = make(chan struct{})
+		ss := newSparkyServer(conn.RemoteAddr().String())
+		ss.done = make(chan bool)
 		ss.blockTicker = make(chan bool, 200)
 
 		// Launch our throughput reporter in a goroutine
@@ -129,7 +163,7 @@ func handler(conn net.Conn) {
 
 		// When our metered copy unblocks, the speed test is done, so we close
 		// this channel to signal the throughput reporter to halt
-		close(ss.done)
+		ss.done <- true
 	}
 }
 
@@ -177,7 +211,6 @@ func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
 			ss.blockTicker <- true
 		}
 	}
-	return
 }
 
 // ReportThroughput reports on throughput of data passed by MeterWrite

@@ -5,8 +5,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
-	"os"
 	"strconv"
 	"time"
 
@@ -15,7 +13,7 @@ import (
 )
 
 // Kick off a throughput measurement test
-func (sc *sparkyClient) runThroughputTest(dir testType) {
+func (sc *sparkyClient) runThroughputTest(testType command) {
 	// Notify the progress bar updater to reset the bar
 	sc.progressBarReset <- true
 
@@ -25,7 +23,7 @@ func (sc *sparkyClient) runThroughputTest(dir testType) {
 	// Launch a throughput measurer and then kick off the metered copy,
 	// blocking until it completes.
 	go sc.MeasureThroughput(measurerDone)
-	sc.MeteredCopy(dir, measurerDone)
+	sc.MeteredCopy(testType, measurerDone)
 
 	// Notify the progress bar updater that the test is done
 	sc.testDone <- true
@@ -34,23 +32,18 @@ func (sc *sparkyClient) runThroughputTest(dir testType) {
 // Kicks off a metered copy (throughput test) by sending a command to the server
 // and then performing the appropriate I/O copy, sending "ticks" by channel as
 // each block of data passes through.
-func (sc *sparkyClient) MeteredCopy(dir testType, measurerDone chan<- struct{}) {
+func (sc *sparkyClient) MeteredCopy(testType command, measurerDone chan<- struct{}) {
 	var rnd io.Reader
 	var tl time.Duration
 
 	// Connect to the remote sparkyfish server
-	conn, err := net.Dial("tcp", os.Args[1])
-	if err != nil {
-		termui.Clear()
-		termui.Close()
-		log.Fatalln(err)
-	}
+	sc.beginSession()
 
-	defer conn.Close()
+	defer sc.conn.Close()
 
 	// Send the appropriate command to the sparkyfish server to initiate our
 	// throughput test
-	switch dir {
+	switch testType {
 	case inbound:
 		// For inbound tests, we bump our timer by 2 seconds to account for
 		// the remote server's test startup time
@@ -58,7 +51,7 @@ func (sc *sparkyClient) MeteredCopy(dir testType, measurerDone chan<- struct{}) 
 
 		// Send the SND command to the remote server, requesting a download test
 		// (remote sends).
-		_, err = conn.Write([]byte("SND"))
+		err := sc.writeCommand("SND")
 		if err != nil {
 			termui.Close()
 			log.Fatalln(err)
@@ -68,7 +61,7 @@ func (sc *sparkyClient) MeteredCopy(dir testType, measurerDone chan<- struct{}) 
 
 		// Send the RCV command to the remote server, requesting an upload test
 		// (remote receives).
-		_, err = conn.Write([]byte("RCV"))
+		err := sc.writeCommand("RCV")
 		if err != nil {
 			termui.Close()
 			log.Fatalln(err)
@@ -80,7 +73,7 @@ func (sc *sparkyClient) MeteredCopy(dir testType, measurerDone chan<- struct{}) 
 	// Set a timer for running the tests
 	timer := time.NewTimer(tl)
 
-	switch dir {
+	switch testType {
 	case inbound:
 		// Receive, tally, and discard incoming data as fast as we can until the sender stops sending or the timer expires
 		for {
@@ -91,7 +84,7 @@ func (sc *sparkyClient) MeteredCopy(dir testType, measurerDone chan<- struct{}) 
 				return
 			default:
 				// Copy data from our net.Conn to the rubbish bin in (blockSize) KB chunks
-				_, err = io.CopyN(ioutil.Discard, conn, 1024*blockSize)
+				_, err := io.CopyN(ioutil.Discard, sc.conn, 1024*blockSize)
 				if err != nil {
 					// Handle the EOF when the test timer has expired at the remote end.
 					if err == io.EOF {
@@ -116,7 +109,7 @@ func (sc *sparkyClient) MeteredCopy(dir testType, measurerDone chan<- struct{}) 
 				return
 			default:
 				// Copy data from our RNG to the net.Conn in (blockSize) KB chunks
-				_, err = io.CopyN(conn, rnd, 1024*blockSize)
+				_, err := io.CopyN(sc.conn, rnd, 1024*blockSize)
 				if err != nil {
 					if err == io.EOF {
 						close(measurerDone)
@@ -135,7 +128,7 @@ func (sc *sparkyClient) MeteredCopy(dir testType, measurerDone chan<- struct{}) 
 // MeasureThroughput receives ticks sent by MeteredCopy() and derives a throughput rate, which is then sent
 // to the throughput reporter.
 func (sc *sparkyClient) MeasureThroughput(measurerDone <-chan struct{}) {
-	var dir = inbound
+	var testType = inbound
 	var blockCount, prevBlockCount uint64
 	var throughput float64
 	var throughputHist []float64
@@ -151,7 +144,7 @@ func (sc *sparkyClient) MeasureThroughput(measurerDone <-chan struct{}) {
 			return
 		case <-sc.changeToUpload:
 			// The download test has completed, so we switch to tallying upload chunks
-			dir = outbound
+			testType = outbound
 		case <-tick.C:
 			throughput = (float64(blockCount - prevBlockCount)) * float64(blockSize*8) / float64(reportIntervalMS)
 
@@ -166,7 +159,7 @@ func (sc *sparkyClient) MeasureThroughput(measurerDone <-chan struct{}) {
 			throughputHist = append(throughputHist, throughput)
 
 			// Update the appropriate graph with the latest measurements
-			switch dir {
+			switch testType {
 			case inbound:
 				sc.wr.jobs["dlgraph"].(*termui.LineChart).Data = throughputHist
 			case outbound:
@@ -190,12 +183,12 @@ func (sc *sparkyClient) generateStats() {
 	var currentUL, maxUL, avgUL float64
 	var dlReadingCount, dlReadingSum float64
 	var ulReadingCount, ulReadingSum float64
-	var dir = inbound
+	var testType = inbound
 
 	for {
 		select {
 		case measurement = <-sc.throughputReport:
-			switch dir {
+			switch testType {
 			case inbound:
 				currentDL = measurement
 				dlReadingCount++
@@ -225,7 +218,7 @@ func (sc *sparkyClient) generateStats() {
 
 			}
 		case <-sc.changeToUpload:
-			dir = outbound
+			testType = outbound
 		case <-sc.statsGeneratorDone:
 			return
 		}

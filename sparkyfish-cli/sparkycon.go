@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"runtime"
 	"sync"
@@ -12,23 +13,26 @@ import (
 )
 
 const (
-	blockSize            int64  = 200 // size (KB) of each block of data copied to/from remote
-	reportIntervalMS     uint64 = 500 // report interval in milliseconds
-	throughputTestLength uint   = 10  // length of time to conduct each throughput test
-	maxPingTestLength    uint   = 10  // maximum time for ping test to complete
-	numPings             int    = 30  // number of pings to attempt
+	protocolVersion      uint16 = 0x00 // Protocol Version
+	blockSize            int64  = 200  // size (KB) of each block of data copied to/from remote
+	reportIntervalMS     uint64 = 500  // report interval in milliseconds
+	throughputTestLength uint   = 10   // length of time to conduct each throughput test
+	maxPingTestLength    uint   = 10   // maximum time for ping test to complete
+	numPings             int    = 30   // number of pings to attempt
 )
 
-// testType is used to indicate the type of test being performed
-type testType int
+// command is used to indicate the type of test being performed
+type command int
 
 const (
-	outbound testType = iota // upload test
-	inbound                  // download test
-	echo                     // echo (ping) test
+	outbound command = iota // upload test
+	inbound                 // download test
+	echo                    // echo (ping) test
 )
 
 type sparkyClient struct {
+	conn               net.Conn
+	serverAddr         string
 	pingTime           chan time.Duration
 	blockTicker        chan bool
 	pingProgressTicker chan bool
@@ -47,14 +51,6 @@ func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("Usage: ", os.Args[0], " <sparkyfish IP:port>")
 	}
-
-	// logf, err := os.OpenFile("sparkyfish.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	// if err != nil {
-	// 	log.Fatalf("error opening file: %v", err)
-	// }
-	// defer logf.Close()
-	//
-	// log.SetOutput(logf)
 
 	// Initialize our screen
 	err := termui.Init()
@@ -315,4 +311,10 @@ func (sc *sparkyClient) updateProgressBar() {
 		}
 	}
 
+}
+
+func fatalError(err error) {
+	termui.Clear()
+	termui.Close()
+	log.Fatal(err)
 }
