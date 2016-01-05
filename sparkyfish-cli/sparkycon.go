@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
@@ -32,6 +33,7 @@ const (
 
 type sparkyClient struct {
 	conn               net.Conn
+	reader             *bufio.Reader
 	serverAddr         string
 	pingTime           chan time.Duration
 	blockTicker        chan bool

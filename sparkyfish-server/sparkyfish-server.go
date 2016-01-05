@@ -3,17 +3,22 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/dustin/randbo"
 )
 
-var debug *bool
+var (
+	hostname *string
+	debug    *bool
+)
 
 const (
 	protocolVersion  uint16 = 0x00 // The latest version of the sparkyfish protocol supported
@@ -86,30 +91,40 @@ func handler(conn net.Conn) {
 		log.Println("COMMAND RECEIVED:", helo[:len(helo)-2])
 	}
 
-	if len(helo) == 7 {
-		if helo[:4] == "HELO" {
-			version, err = strconv.ParseUint(helo[4:5], 10, 16)
-			if err != nil {
-				log.Println("error parsing version", err)
-				return
-			}
-
-			if *debug {
-				log.Printf("HELO received.  Version: %#x", version)
-			}
-
-			if uint16(version) > protocolVersion {
-				ss.client.Write([]byte("ERR:Protocol version not supported\n"))
-				log.Println("Invalid protocol version requested", version)
-				return
-			}
-
-		} else {
-			ss.client.Write([]byte("ERR:Invalid HELO received\n"))
-			return
-		}
-	} else {
+	// The HELO command must be exactly 7 bytes long, including version and CRLF
+	if len(helo) != 7 {
 		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
+		return
+	}
+
+	if helo[:4] != "HELO" {
+		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
+		return
+	}
+
+	// Parse the version number
+	version, err = strconv.ParseUint(helo[4:5], 10, 16)
+	if err != nil {
+		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
+		log.Println("error parsing version", err)
+		return
+	}
+
+	if *debug {
+		log.Printf("HELO received.  Version: %#x", version)
+	}
+
+	// Close the connection if the client requests a protocol version
+	// greater than what we support
+	if uint16(version) > protocolVersion {
+		ss.client.Write([]byte("ERR:Protocol version not supported\n"))
+		log.Println("Invalid protocol version requested", version)
+		return
+	}
+
+	_, err = ss.client.Write([]byte(fmt.Sprintf("%v ready\n", *hostname)))
+	if err != nil {
+		log.Println("error writing HELO response to client:", err)
 		return
 	}
 
@@ -264,6 +279,10 @@ blockcounter:
 func main() {
 	listenAddr := flag.String("listen-addr", ":7121", "IP:Port to listen on for speed tests (default: all IPs, port 7121)")
 	debug = flag.Bool("debug", false, "Print debugging information to stdout")
+
+	// Fetch our hostname.  Reported to the client after a successful HELO
+	hn, _ := os.Hostname()
+	hostname = flag.String("hostname", hn, "Optional hostname to return to client after HELO")
 	flag.Parse()
 
 	startListener(*listenAddr)
