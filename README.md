@@ -76,5 +76,6 @@ docker run -e LOCATION="My Town, Somewhere, USA" -d -p 7121:7121 chrissnell/spar
 * A Sparkyfish directory server to allow for auto-registration of public Sparkyfish servers, including Route53 DNS setup
 * Adding a HTTP listener to ```sparkyfish-server``` to allow for Route53 health checks
 * Use termui's grid layout mode to allow for auto-resizing
+* Move to a WebSockets-based protocol for easier client-side support
 * HTML/JS web-based client! (Want to write one?)
 * iOS and Android native clients (help needed)
