@@ -53,7 +53,7 @@ type sparkyClient struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: ", os.Args[0], " <sparkyfish IP>[:port]")
+		log.Fatal("Usage: ", os.Args[0], " <sparkyfish server hostname/IP>[:port]")
 	}
 
 	dest := os.Args[1]
