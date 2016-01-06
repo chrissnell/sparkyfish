@@ -7,4 +7,4 @@ ENV LOCATION none
 ENV LISTEN_ADDR :7121
 EXPOSE 7121
 
-CMD /sparkyfish-server -listen-addr=$LISTEN_ADDR -debug=$DEBUG -cname=$CNAME -location=$LOCATION
+CMD /sparkyfish-server -listen-addr=$LISTEN_ADDR -debug=$DEBUG -cname=$CNAME -location="$LOCATION"
