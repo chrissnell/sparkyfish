@@ -54,6 +54,17 @@ go get github.com/chrissnell/sparkyfish
 Your binaries will be placed in ```$GOPATH/bin/```.
 
 # Running your own Sparkyfish server
+## Running from command line
+You can download the latest ```sparkyfish-server``` release from the [Releases](https://github.com/chrissnell/sparkyfish/releases/) page.  Then:
+```
+gunzip <binary filename>.gz
+chmod 755 <binary filename>
+./<binary filename> -h  # to see options
+./<binary filename> -location="Your Physical Location, Somewhere"
+```
+
+By default, the server listens on port 7121, so make sure that you open a firewall hole for it if needed.  If the port is firewalled, the client will hang during the ping testing.
+
 ## Docker method
 ```
 docker pull chrissnell/sparkyfish-server:latest
