@@ -2,21 +2,23 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
-	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dustin/randbo"
 )
 
 var (
-	hostname *string
+	cname    *string
+	location *string
 	debug    *bool
 )
 
@@ -87,12 +89,14 @@ func handler(conn net.Conn) {
 	if err != nil {
 		log.Println("error reading from remote:", err)
 	}
+	helo = strings.TrimSpace(helo)
+
 	if *debug {
-		log.Println("COMMAND RECEIVED:", helo[:len(helo)-2])
+		log.Println("COMMAND RECEIVED:", helo)
 	}
 
 	// The HELO command must be exactly 7 bytes long, including version and CRLF
-	if len(helo) != 7 {
+	if len(helo) != 5 {
 		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
 		return
 	}
@@ -103,7 +107,7 @@ func handler(conn net.Conn) {
 	}
 
 	// Parse the version number
-	version, err = strconv.ParseUint(helo[4:5], 10, 16)
+	version, err = strconv.ParseUint(helo[4:], 10, 16)
 	if err != nil {
 		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
 		log.Println("error parsing version", err)
@@ -122,7 +126,19 @@ func handler(conn net.Conn) {
 		return
 	}
 
-	_, err = ss.client.Write([]byte(fmt.Sprintf("%v ready\n", *hostname)))
+	banner := bytes.NewBufferString("HELO\n")
+	if *cname != "" {
+		banner.WriteString(fmt.Sprintln(*cname))
+	} else {
+		banner.WriteString("none\n")
+	}
+	if *location != "" {
+		banner.WriteString(fmt.Sprintln(*location))
+	} else {
+		banner.WriteString("none\n")
+	}
+
+	_, err = banner.WriteTo(ss.client)
 	if err != nil {
 		log.Println("error writing HELO response to client:", err)
 		return
@@ -133,16 +149,18 @@ func handler(conn net.Conn) {
 		log.Println("error reading from remote:", err)
 		return
 	}
+	cmd = strings.TrimSpace(cmd)
+
 	if *debug {
 		log.Println("COMMAND RECEIVED:", string(cmd))
 	}
 
-	if len(cmd) < 4 {
+	if len(cmd) != 3 {
 		ss.client.Write([]byte("ERR:Invalid command received\n"))
 		return
 	}
 
-	switch string(cmd[:3]) {
+	switch cmd {
 	case "SND":
 		ss.testType = outbound
 		log.Printf("[%v] initiated download test", ss.client.RemoteAddr())
@@ -281,8 +299,8 @@ func main() {
 	debug = flag.Bool("debug", false, "Print debugging information to stdout")
 
 	// Fetch our hostname.  Reported to the client after a successful HELO
-	hn, _ := os.Hostname()
-	hostname = flag.String("hostname", hn, "Optional hostname to return to client after HELO")
+	cname = flag.String("cname", "", "Canonical hostname or IP address to optionally report to client. If you specify one, it must be DNS-resolvable.")
+	location = flag.String("location", "", "Location of server (e.g. \"Dallas, TX\") [optional]")
 	flag.Parse()
 
 	startListener(*listenAddr)
