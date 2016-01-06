@@ -31,7 +31,7 @@ Run the client like this:
 
 The client takes only one parameter.  The IP (with optional :port) of the sparkyfish server.  You can use our public server round-robin to try it out:  ```us.sparkyfish.chrissnell.com```.  Sparkyfish servers default to port 7121.
 
-For more info on the public sparkyfish servers, see [docs/PUBLIC-SERVERS.md](docs/PUBLIC-SERVERS.md).
+**Don't expect massive bandwidth from any of our current public servers.  They're mostly just some small public cloud servers that I scrounged up from friends.**  For more info on the public sparkyfish servers, see [docs/PUBLIC-SERVERS.md](docs/PUBLIC-SERVERS.md).
 
 ## Running from Docker (optional)
 You can also run ```sparkyfish-cli``` via Docker.  I'm not sure if this is the most optimal way to use it, however. After running the client once, the terminal window environment gets a little hosed up and sparkyfish-cli will complain about window size the next time you run it.  You can fix these by running ```reset``` in your terminal and then-re-running the image.
