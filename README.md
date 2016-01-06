@@ -14,7 +14,7 @@ Sparkyfish offers several advantages over speedtest.net and its unofficial clien
 * Sparkyfish uses an open protocol for testing.  You're welcome to implement your own alternative front-end client or server!
 
 # Sparkyfish CLI
-## Installation
+### Installation
 The easiest way to get started is to [download a binary release](https://github.com/chrissnell/sparkyfish/releases/).  Sparkyfish is written in Go and compiles to a static binary so there are no dependencies if you're using the official binaries.  
 
 Once you've downloaded the binary...
@@ -24,7 +24,7 @@ chmod 755 <binary>
 mv <binary> /usr/local/bin/sparkyfish-cli
 ```
 
-## Running the client
+### Running the client
 Run the client like this:
 
 ```sparkyfish-cli <sparkyfish server IP>[:port]```
@@ -33,7 +33,7 @@ The client takes only one parameter.  The IP (with optional :port) of the sparky
 
 **Don't expect massive bandwidth from any of our current public servers.  They're mostly just some small public cloud servers that I scrounged up from friends.**  For more info on the public sparkyfish servers, see [docs/PUBLIC-SERVERS.md](docs/PUBLIC-SERVERS.md).
 
-## Running from Docker (optional)
+### Running from Docker (optional)
 You can also run ```sparkyfish-cli``` via Docker.  I'm not sure if this is the most optimal way to use it, however. After running the client once, the terminal window environment gets a little hosed up and sparkyfish-cli will complain about window size the next time you run it.  You can fix these by running ```reset``` in your terminal and then-re-running the image.
 
 If you want to test it out, here's how to do it:
@@ -44,7 +44,7 @@ docker run --dns 8.8.8.8 -t -i chrissnell/sparkyfish-cli:latest us.sparkyfish.ch
 reset  # Fix the broken terminal size env before you run it again
 ```
 
-## Building from source (optional)
+### Building from source (optional)
 If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
 
 ```
@@ -54,7 +54,7 @@ go get github.com/chrissnell/sparkyfish
 Your binaries will be placed in ```$GOPATH/bin/```.
 
 # Running your own Sparkyfish server
-## Running from command line
+### Running from command line
 You can download the latest ```sparkyfish-server``` release from the [Releases](https://github.com/chrissnell/sparkyfish/releases/) page.  Then:
 ```
 gunzip <binary filename>.gz
@@ -65,8 +65,15 @@ chmod 755 <binary filename>
 
 By default, the server listens on port 7121, so make sure that you open a firewall hole for it if needed.  If the port is firewalled, the client will hang during the ping testing.
 
-## Docker method
+### Docker method
 ```
 docker pull chrissnell/sparkyfish-server:latest
 docker run -e LOCATION="My Town, Somewhere, USA" -d -p 7121:7121 chrissnell/sparkyfish-server:latest
 ```
+
+# Future Efforts
+* A Sparkyfish directory server to allow for auto-registration of public Sparkyfish servers, including Route53 DNS setup
+* Adding a HTTP listener to ```sparkyfish-server``` to allow for Route53 health checks
+* Use termui's grid layout mode to allow for auto-resizing
+* HTML/JS web-based client! (Want to write one?)
+* iOS and Android native clients (help needed)
