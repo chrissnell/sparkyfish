@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TAG=`git describe --tags`
+TAG=`git describe --tag --abbrev=0`
 
 platforms=( darwin linux freebsd windows openbsd )
 
