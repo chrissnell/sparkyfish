@@ -13,7 +13,7 @@ Sparkyfish offers several advantages over speedtest.net and its unofficial clien
 * [No net-neutrality issues](https://www.techdirt.com/blog/netneutrality/articles/20141124/14064729242/fcc-gives-t-mobile-talking-to-exempting-speedtests-caps-preventing-users-seeing-theyd-been-throttled.shtml)
 * Sparkyfish uses an open protocol for testing.  You're welcome to implement your own alternative front-end client or server!
 
-# Sparkyfish CLI
+# Getting Started
 ### Installation
 The easiest way to get started is to [download a binary release](https://github.com/chrissnell/sparkyfish/releases/).  Sparkyfish is written in Go and compiles to a static binary so there are no dependencies if you're using the official binaries.  
 
@@ -72,6 +72,7 @@ docker run -e LOCATION="My Town, Somewhere, USA" -d -p 7121:7121 chrissnell/spar
 ```
 
 # Future Efforts
+* Proper testing code and automated builds
 * A Sparkyfish directory server to allow for auto-registration of public Sparkyfish servers, including Route53 DNS setup
 * Adding a HTTP listener to ```sparkyfish-server``` to allow for Route53 health checks
 * Use termui's grid layout mode to allow for auto-resizing
