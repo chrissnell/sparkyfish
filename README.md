@@ -33,7 +33,7 @@ The client takes only one parameter.  The IP (with optional :port) of the sparky
 
 For more info on the public sparkyfish servers, see [docs/PUBLIC-SERVERS.md](docs/PUBLIC-SERVERS.md).
 
-## Running from Docker
+## Running from Docker (optional)
 You can also run ```sparkyfish-cli``` via Docker.  I'm not sure if this is the most optimal way to use it, however. After running the client once, the terminal window environment gets a little hosed up and sparkyfish-cli will complain about window size the next time you run it.  You can fix these by running ```reset``` in your terminal and then-re-running the image.
 
 If you want to test it out, here's how to do it:
