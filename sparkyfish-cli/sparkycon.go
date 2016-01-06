@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"runtime"
 	"sync"
@@ -12,23 +14,28 @@ import (
 )
 
 const (
-	blockSize            int64  = 200 // size (KB) of each block of data copied to/from remote
-	reportIntervalMS     uint64 = 500 // report interval in milliseconds
-	throughputTestLength uint   = 10  // length of time to conduct each throughput test
-	maxPingTestLength    uint   = 10  // maximum time for ping test to complete
-	numPings             int    = 30  // number of pings to attempt
+	protocolVersion      uint16 = 0x00 // Protocol Version
+	blockSize            int64  = 200  // size (KB) of each block of data copied to/from remote
+	reportIntervalMS     uint64 = 500  // report interval in milliseconds
+	throughputTestLength uint   = 10   // length of time to conduct each throughput test
+	maxPingTestLength    uint   = 10   // maximum time for ping test to complete
+	numPings             int    = 30   // number of pings to attempt
 )
 
-// testType is used to indicate the type of test being performed
-type testType int
+// command is used to indicate the type of test being performed
+type command int
 
 const (
-	outbound testType = iota // upload test
-	inbound                  // download test
-	echo                     // echo (ping) test
+	outbound command = iota // upload test
+	inbound                 // download test
+	echo                    // echo (ping) test
 )
 
 type sparkyClient struct {
+	conn               net.Conn
+	reader             *bufio.Reader
+	serverCname        string
+	serverLocation     string
 	pingTime           chan time.Duration
 	blockTicker        chan bool
 	pingProgressTicker chan bool
@@ -47,14 +54,6 @@ func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("Usage: ", os.Args[0], " <sparkyfish IP:port>")
 	}
-
-	// logf, err := os.OpenFile("sparkyfish.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	// if err != nil {
-	// 	log.Fatalf("error opening file: %v", err)
-	// }
-	// defer logf.Close()
-	//
-	// log.SetOutput(logf)
 
 	// Initialize our screen
 	err := termui.Init()
@@ -126,6 +125,14 @@ func (sc *sparkyClient) runTestSequence() {
 	titleBox.Border = false
 	titleBox.TextFgColor = termui.ColorWhite | termui.AttrBold
 
+	// Build the server name/location banner line
+	bannerBox := termui.NewPar("")
+	bannerBox.Height = 1
+	bannerBox.Width = 60
+	bannerBox.Y = 1
+	bannerBox.Border = false
+	bannerBox.TextFgColor = termui.ColorRed | termui.AttrBold
+
 	// Build a download graph widget
 	dlGraph := termui.NewLineChart()
 	dlGraph.BorderLabel = " Download Speed (Mbit/s)"
@@ -134,7 +141,7 @@ func (sc *sparkyClient) runTestSequence() {
 	dlGraph.Height = 12
 	dlGraph.PaddingTop = 1
 	dlGraph.X = 0
-	dlGraph.Y = 5
+	dlGraph.Y = 6
 	// Windows Command Prompt doesn't support our Unicode characters with the default font
 	if runtime.GOOS == "windows" {
 		dlGraph.Mode = "dot"
@@ -151,7 +158,7 @@ func (sc *sparkyClient) runTestSequence() {
 	ulGraph.Height = 12
 	ulGraph.PaddingTop = 1
 	ulGraph.X = 30
-	ulGraph.Y = 5
+	ulGraph.Y = 6
 	// Windows Command Prompt doesn't support our Unicode characters with the default font
 	if runtime.GOOS == "windows" {
 		ulGraph.Mode = "dot"
@@ -165,7 +172,7 @@ func (sc *sparkyClient) runTestSequence() {
 	latencyGraph.Height = 3
 
 	latencyGroup := termui.NewSparklines(latencyGraph)
-	latencyGroup.Y = 2
+	latencyGroup.Y = 3
 	latencyGroup.Height = 3
 	latencyGroup.Width = 30
 	latencyGroup.Border = false
@@ -176,13 +183,13 @@ func (sc *sparkyClient) runTestSequence() {
 	latencyTitle.Width = 30
 	latencyTitle.Border = false
 	latencyTitle.TextFgColor = termui.ColorGreen
-	latencyTitle.Y = 1
+	latencyTitle.Y = 2
 
 	latencyStats := termui.NewPar("")
 	latencyStats.Height = 4
 	latencyStats.Width = 30
 	latencyStats.X = 32
-	latencyStats.Y = 1
+	latencyStats.Y = 2
 	latencyStats.Border = false
 	latencyStats.TextFgColor = termui.ColorWhite | termui.AttrBold
 	latencyStats.Text = "Last: 30ms\nMin: 2ms\nMax: 34ms"
@@ -191,7 +198,7 @@ func (sc *sparkyClient) runTestSequence() {
 	statsSummary := termui.NewPar("")
 	statsSummary.Height = 7
 	statsSummary.Width = 60
-	statsSummary.Y = 17
+	statsSummary.Y = 18
 	statsSummary.BorderLabel = " Throughput Summary "
 	statsSummary.Text = fmt.Sprintf("DOWNLOAD \nCurrent: -- Mbit/s\tMax: --\tAvg: --\n\nUPLOAD\nCurrent: -- Mbit/s\tMax: --\tAvg: --")
 	statsSummary.TextFgColor = termui.ColorWhite | termui.AttrBold
@@ -201,7 +208,7 @@ func (sc *sparkyClient) runTestSequence() {
 	progress.Percent = 40
 	progress.Width = 60
 	progress.Height = 3
-	progress.Y = 24
+	progress.Y = 25
 	progress.X = 0
 	progress.Border = true
 	progress.BorderLabel = " Test Progress "
@@ -215,7 +222,7 @@ func (sc *sparkyClient) runTestSequence() {
 	helpBox := termui.NewPar(" COMMANDS: [q]uit")
 	helpBox.Height = 1
 	helpBox.Width = 60
-	helpBox.Y = 27
+	helpBox.Y = 28
 	helpBox.Border = false
 	helpBox.TextBgColor = termui.ColorBlue
 	helpBox.TextFgColor = termui.ColorYellow | termui.AttrBold
@@ -223,6 +230,7 @@ func (sc *sparkyClient) runTestSequence() {
 
 	// Add the widgets to the rendering jobs and render the screen
 	sc.wr.Add("titlebox", titleBox)
+	sc.wr.Add("bannerbox", bannerBox)
 	sc.wr.Add("dlgraph", dlGraph)
 	sc.wr.Add("ulgraph", ulGraph)
 	sc.wr.Add("latency", latencyGroup)
@@ -315,4 +323,10 @@ func (sc *sparkyClient) updateProgressBar() {
 		}
 	}
 
+}
+
+func fatalError(err error) {
+	termui.Clear()
+	termui.Close()
+	log.Fatal(err)
 }

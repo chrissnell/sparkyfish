@@ -4,18 +4,26 @@ import (
 	"bufio"
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dustin/randbo"
 )
 
-var debug *bool
+var (
+	cname    *string
+	location *string
+	debug    *bool
+)
 
 const (
+	protocolVersion  uint16 = 0x00 // The latest version of the sparkyfish protocol supported
 	blockSize        int64  = 200  // size of each block copied to/from remote
 	reportIntervalMS uint64 = 1000 // report interval in milliseconds
 	testLength       uint   = 10   // length of throughput tests (sec)
@@ -27,20 +35,22 @@ const (
 type TestType int
 
 const (
-	Outbound TestType = iota
-	Inbound
-	Echo
+	outbound TestType = iota
+	inbound
+	echo
 )
 
 // sparkyServer handles requests for throughput and latency tests
 type sparkyServer struct {
+	client      net.Conn
+	testType    TestType
+	reader      *bufio.Reader
 	blockTicker chan bool
-	done        chan struct{}
-	remoteAddr  string
+	done        chan bool
 }
 
-func NewSparkyServer(remoteAddr string) *sparkyServer {
-	ss := &sparkyServer{remoteAddr: remoteAddr}
+func newSparkyServer(client net.Conn) sparkyServer {
+	ss := sparkyServer{client: client}
 	return ss
 }
 
@@ -62,87 +72,156 @@ func startListener(listenAddr string) {
 }
 
 func handler(conn net.Conn) {
-	defer conn.Close()
-	var tt TestType
+	var version uint64
 
-	// Valid client commands, issued upon successful connection
-	cmdSND := []byte{'S', 'N', 'D'} // server->client speed test (download)
-	cmdRCV := []byte{'R', 'C', 'V'} // client->server speed test (upload)
-	cmdECO := []byte{'E', 'C', 'O'} // ping/echo test
+	ss := newSparkyServer(conn)
 
-	// Read a 3-byte command from the client
-	cmd := make([]byte, 3, 3)
-	_, err := conn.Read(cmd)
+	ss.done = make(chan bool)
+	ss.blockTicker = make(chan bool, 200)
+
+	defer ss.client.Close()
+
+	ss.reader = bufio.NewReader(ss.client)
+
+	// Every connection begins with a HELO<version> command,
+	// where <version> is one byte that will be converted to a uint16
+	helo, err := ss.reader.ReadString('\n')
 	if err != nil {
-		log.Println("error reading from remote:", conn)
+		log.Println("error reading from remote:", err)
 	}
+	helo = strings.TrimSpace(helo)
+
+	if *debug {
+		log.Println("COMMAND RECEIVED:", helo)
+	}
+
+	// The HELO command must be exactly 7 bytes long, including version and CRLF
+	if len(helo) != 5 {
+		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
+		return
+	}
+
+	if helo[:4] != "HELO" {
+		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
+		return
+	}
+
+	// Parse the version number
+	version, err = strconv.ParseUint(helo[4:], 10, 16)
+	if err != nil {
+		ss.client.Write([]byte("ERR:Invalid HELO received\n"))
+		log.Println("error parsing version", err)
+		return
+	}
+
+	if *debug {
+		log.Printf("HELO received.  Version: %#x", version)
+	}
+
+	// Close the connection if the client requests a protocol version
+	// greater than what we support
+	if uint16(version) > protocolVersion {
+		ss.client.Write([]byte("ERR:Protocol version not supported\n"))
+		log.Println("Invalid protocol version requested", version)
+		return
+	}
+
+	banner := bytes.NewBufferString("HELO\n")
+	if *cname != "" {
+		banner.WriteString(fmt.Sprintln(*cname))
+	} else {
+		banner.WriteString("none\n")
+	}
+	if *location != "" {
+		banner.WriteString(fmt.Sprintln(*location))
+	} else {
+		banner.WriteString("none\n")
+	}
+
+	_, err = banner.WriteTo(ss.client)
+	if err != nil {
+		log.Println("error writing HELO response to client:", err)
+		return
+	}
+
+	cmd, err := ss.reader.ReadString('\n')
+	if err != nil {
+		log.Println("error reading from remote:", err)
+		return
+	}
+	cmd = strings.TrimSpace(cmd)
+
 	if *debug {
 		log.Println("COMMAND RECEIVED:", string(cmd))
 	}
 
-	switch {
-	case bytes.Compare(cmd, cmdSND) == 0:
-		tt = Outbound
-		log.Printf("[%v] initiated download test", conn.RemoteAddr())
-	case bytes.Compare(cmd, cmdRCV) == 0:
-		tt = Inbound
-		log.Printf("[%v] initiated upload test", conn.RemoteAddr())
-	case bytes.Compare(cmd, cmdECO) == 0:
-		tt = Echo
-		log.Printf("[%v] initiated echo test", conn.RemoteAddr())
-	default:
-		// If the client didn't send a SND or RCV command, close the connection
-		conn.Close()
+	if len(cmd) != 3 {
+		ss.client.Write([]byte("ERR:Invalid command received\n"))
 		return
 	}
 
-	if tt == Echo {
-		// Start an echo/ping test
-		r := bufio.NewReader(conn)
-		for c := 0; c <= pingTestLength-1; c++ {
-			chr, err := r.ReadByte()
-			if err != nil {
-				log.Println("Error reading byte:", err)
-				break
-			}
-			if *debug {
-				log.Println("Copying byte:", chr)
-			}
-			_, err = conn.Write([]byte{chr})
-			if err != nil {
-				log.Println("Error writing byte:", err)
-				break
-			}
-		}
+	switch cmd {
+	case "SND":
+		ss.testType = outbound
+		log.Printf("[%v] initiated download test", ss.client.RemoteAddr())
+	case "RCV":
+		ss.testType = inbound
+		log.Printf("[%v] initiated upload test", ss.client.RemoteAddr())
+	case "ECO":
+		ss.testType = echo
+		log.Printf("[%v] initiated echo test", ss.client.RemoteAddr())
+	default:
+		ss.client.Write([]byte("ERR:Invalid command received"))
 		return
+	}
+
+	if ss.testType == echo {
+		// Start an echo/ping test and block until it finishes
+		ss.echoTest()
 	} else {
 		// Start an upload/download test
-		ss := NewSparkyServer(conn.RemoteAddr().String())
-		ss.done = make(chan struct{})
-		ss.blockTicker = make(chan bool, 200)
 
 		// Launch our throughput reporter in a goroutine
-		go ss.ReportThroughput(tt)
+		go ss.ReportThroughput()
 
 		// Start our metered copier and block until it finishes
-		ss.MeteredCopy(conn, tt)
+		ss.MeteredCopy()
 
 		// When our metered copy unblocks, the speed test is done, so we close
 		// this channel to signal the throughput reporter to halt
-		close(ss.done)
+		ss.done <- true
 	}
 }
 
+func (ss *sparkyServer) echoTest() {
+	for c := 0; c <= pingTestLength-1; c++ {
+		chr, err := ss.reader.ReadByte()
+		if err != nil {
+			log.Println("Error reading byte:", err)
+			break
+		}
+		if *debug {
+			log.Println("Copying byte:", chr)
+		}
+		_, err = ss.client.Write([]byte{chr})
+		if err != nil {
+			log.Println("Error writing byte:", err)
+			break
+		}
+	}
+	return
+}
+
 // MeteredCopy copies to or from a net.Conn, keeping count of the data it passes
-func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
+func (ss *sparkyServer) MeteredCopy() {
 	var err error
 	var timer *time.Timer
 
 	// Set a timer that we'll use to stop the test.  If we're running an inbound test,
 	// we extend the timer by two seconds to allow the client to finish its sending.
-	if dir == Inbound {
+	if ss.testType == inbound {
 		timer = time.NewTimer(time.Second * time.Duration(testLength+2))
-	} else if dir == Outbound {
+	} else if ss.testType == outbound {
 		timer = time.NewTimer(time.Second * time.Duration(testLength))
 	}
 
@@ -158,11 +237,11 @@ func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
 			return
 		default:
 			// Copy our random data from randbo to our ResponseWriter, 100KB at a time
-			switch dir {
-			case Outbound:
-				_, err = io.CopyN(conn, rnd, 1024*blockSize)
-			case Inbound:
-				_, err = io.CopyN(ioutil.Discard, conn, 1024*blockSize)
+			switch ss.testType {
+			case outbound:
+				_, err = io.CopyN(ss.client, rnd, 1024*blockSize)
+			case inbound:
+				_, err = io.CopyN(ioutil.Discard, ss.client, 1024*blockSize)
 			}
 
 			// io.EOF is normal when a client drops off after the test
@@ -177,11 +256,10 @@ func (ss *sparkyServer) MeteredCopy(conn net.Conn, dir TestType) {
 			ss.blockTicker <- true
 		}
 	}
-	return
 }
 
 // ReportThroughput reports on throughput of data passed by MeterWrite
-func (ss *sparkyServer) ReportThroughput(tt TestType) {
+func (ss *sparkyServer) ReportThroughput() {
 	var blockCount, prevBlockCount uint64
 
 	tick := time.NewTicker(time.Duration(reportIntervalMS) * time.Millisecond)
@@ -201,7 +279,7 @@ blockcounter:
 			// Every second, we calculate how many blocks were received
 			// and derive an average throughput rate.
 			if *debug {
-				log.Printf("[%v] %v Kbit/sec", ss.remoteAddr, (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
+				log.Printf("[%v] %v Kbit/sec", ss.client.RemoteAddr(), (blockCount-prevBlockCount)*uint64(blockSize*8)*(1000/reportIntervalMS))
 			}
 			prevBlockCount = blockCount
 		}
@@ -209,16 +287,20 @@ blockcounter:
 
 	mbCopied := float64(blockCount * uint64(blockSize) / 1000)
 	duration := time.Now().Sub(start).Seconds()
-	if tt == Outbound {
-		log.Printf("[%v] Sent %v MB in %.2f seconds (%.2f Mbit/s)", ss.remoteAddr, mbCopied, duration, (mbCopied/duration)*8)
-	} else if tt == Inbound {
-		log.Printf("[%v] Recd %v MB in %.2f seconds (%.2f) Mbit/s", ss.remoteAddr, mbCopied, duration, (mbCopied/duration)*8)
+	if ss.testType == outbound {
+		log.Printf("[%v] Sent %v MB in %.2f seconds (%.2f Mbit/s)", ss.client.RemoteAddr(), mbCopied, duration, (mbCopied/duration)*8)
+	} else if ss.testType == inbound {
+		log.Printf("[%v] Recd %v MB in %.2f seconds (%.2f) Mbit/s", ss.client.RemoteAddr(), mbCopied, duration, (mbCopied/duration)*8)
 	}
 }
 
 func main() {
 	listenAddr := flag.String("listen-addr", ":7121", "IP:Port to listen on for speed tests (default: all IPs, port 7121)")
 	debug = flag.Bool("debug", false, "Print debugging information to stdout")
+
+	// Fetch our hostname.  Reported to the client after a successful HELO
+	cname = flag.String("cname", "", "Canonical hostname or IP address to optionally report to client. If you specify one, it must be DNS-resolvable.")
+	location = flag.String("location", "", "Location of server (e.g. \"Dallas, TX\") [optional]")
 	flag.Parse()
 
 	startListener(*listenAddr)
