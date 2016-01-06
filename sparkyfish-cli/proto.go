@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"strings"
 
 	"github.com/gizak/termui"
@@ -15,7 +14,7 @@ import (
 func (sc *sparkyClient) beginSession() {
 	var err error
 
-	sc.conn, err = net.Dial("tcp", os.Args[1])
+	sc.conn, err = net.Dial("tcp", sc.serverHostname)
 	if err != nil {
 		fatalError(err)
 	}
@@ -60,7 +59,7 @@ func (sc *sparkyClient) beginSession() {
 	if cname == "none" {
 		// If a cname was not provided, we'll just show the hostname that the
 		// test was run against
-		cname, _, _ = net.SplitHostPort(os.Args[1])
+		cname, _, _ = net.SplitHostPort(sc.serverHostname)
 	}
 
 	serverBanner.WriteString(sanitize(cname))

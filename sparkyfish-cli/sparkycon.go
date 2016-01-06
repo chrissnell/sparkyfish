@@ -36,6 +36,7 @@ type sparkyClient struct {
 	reader             *bufio.Reader
 	serverCname        string
 	serverLocation     string
+	serverHostname     string
 	pingTime           chan time.Duration
 	blockTicker        chan bool
 	pingProgressTicker chan bool
@@ -52,7 +53,13 @@ type sparkyClient struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: ", os.Args[0], " <sparkyfish IP:port>")
+		log.Fatal("Usage: ", os.Args[0], " <sparkyfish IP>[:port]")
+	}
+
+	dest := os.Args[1]
+	i := last(dest, ':')
+	if i < 0 {
+		dest = fmt.Sprint(dest, ":7121")
 	}
 
 	// Initialize our screen
@@ -78,6 +85,8 @@ func main() {
 	})
 
 	sc := newsparkyClient()
+	sc.serverHostname = dest
+
 	sc.prepareChannels()
 
 	sc.wr = newwidgetRenderer()
@@ -329,4 +338,16 @@ func fatalError(err error) {
 	termui.Clear()
 	termui.Close()
 	log.Fatal(err)
+}
+
+// Index of rightmost occurrence of b in s.
+// Borrowed from golang.org/pkg/net/net.go
+func last(s string, b byte) int {
+	i := len(s)
+	for i--; i >= 0; i-- {
+		if s[i] == b {
+			break
+		}
+	}
+	return i
 }
