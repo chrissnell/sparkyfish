@@ -33,6 +33,17 @@ The client takes only one parameter.  The IP (with optional :port) of the sparky
 
 For more info on the public sparkyfish servers, see [docs/PUBLIC-SERVERS.md](docs/PUBLIC-SERVERS.md).
 
+## Running from Docker
+You can also run ```sparkyfish-cli``` via Docker.  I'm not sure if this is the most optimal way to use it, however. After running the client once, the terminal window environment gets a little hosed up and sparkyfish-cli will complain about window size the next time you run it.  You can fix these by running ```reset``` in your terminal and then-re-running the image.
+
+If you want to test it out, here's how to do it:
+
+```
+docker pull chrissnell/sparkyfish-cli:latest
+docker run --dns 8.8.8.8 -t -i chrissnell/sparkyfish-cli:latest us.sparkyfish.chrissnell.com
+reset  # Fix the broken terminal size env before you run it again
+```
+
 ## Building from source (optional)
 If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
 
