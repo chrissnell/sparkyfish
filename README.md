@@ -48,7 +48,7 @@ reset  # Fix the broken terminal size env before you run it again
 If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
 
 ```
-go get github.com/chrissnell/sparkyfish
+go get github.com/chrissnell/sparkyfish/sparkyfish-cli
 ```
 
 Your binaries will be placed in ```$GOPATH/bin/```.
@@ -64,6 +64,13 @@ chmod 755 <binary filename>
 ```
 
 By default, the server listens on port 7121, so make sure that you open a firewall hole for it if needed.  If the port is firewalled, the client will hang during the ping testing.
+
+### Building from source (optional)
+If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
+
+```
+go get github.com/chrissnell/sparkyfish/sparkyfish-server
+```
 
 ### Docker method
 ```
