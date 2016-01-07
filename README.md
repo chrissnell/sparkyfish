@@ -89,3 +89,6 @@ docker run -e LOCATION="My Town, Somewhere, USA" -d -p 7121:7121 chrissnell/spar
 * Move to a WebSockets-based protocol for easier client-side support
 * HTML/JS web-based client! (Want to write one?)
 * iOS and Android native clients (help needed)
+
+# IRC
+You can find the author and some operators of public servers in #sparkyfish on Freenode.  Come join us!
