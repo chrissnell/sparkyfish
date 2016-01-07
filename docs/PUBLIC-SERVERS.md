@@ -15,8 +15,8 @@ If you want to try a specific server, here's a list of the current public server
 
 | Hostname / Port | Location | Sponsor| ISP| Link Capacity | Protocol |
 |----------|----------|-----|----|-----------|----------|
-| us-seattle.sparkyfish.chrissnell.com| Seattle, WA | Nigel VH| Blue Box | 150 Mbps up/down| IPv4 + IPv6 |
-| us-atlanta.sparkyfish.chrissnell.com| Atlanta, GA | Sam Kuonen | Georgia Tech | 200 Mbps up/down | IPv4|
+| us-seattle.sparkyfish.chrissnell.com | Seattle, WA | Nigel VH | Blue Box | 150 Mbps up/down| IPv4 + IPv6 |
+| sparky.ga.hamwan.net | Atlanta, GA | W4AQL | Georgia Institute of Technology | 1 Gbps up/down | IPv4|
 | eu-netherlands.sparkyfish.chrissnell.com | Amsterdam, NL | Josh Braegger |DigitalOcean| 30 Mbps up/down | IPv4 |
 | eu-germany.sparkyfish.com | Gunzenhausen, DE | Kirk Harr | Hetzner.de | 10 Mbps up/down | IPv4 + IPv6 |
 
