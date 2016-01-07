@@ -91,4 +91,4 @@ docker run -e LOCATION="My Town, Somewhere, USA" -d -p 7121:7121 chrissnell/spar
 * iOS and Android native clients (help needed)
 
 # IRC
-You can find the author and some operators of public servers in #sparkyfish on Freenode.  Come join us!
+You can find the author and some operators of public servers in **#sparkyfish** on Freenode.  Come join us!
