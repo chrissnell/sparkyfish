@@ -111,7 +111,7 @@ func handler(conn net.Conn, ss *sparkyServer) {
 	// where <version> is one byte that will be converted to a uint16
 	helo, err := sc.reader.ReadString('\n')
 	if err != nil {
-		log.Println("error reading from remote:", err)
+		// If a client hangs up, just hang up silently
 		return
 	}
 	helo = strings.TrimSpace(helo)
@@ -171,7 +171,6 @@ func handler(conn net.Conn, ss *sparkyServer) {
 
 	cmd, err := sc.reader.ReadString('\n')
 	if err != nil {
-		log.Println("error reading from remote:", err)
 		return
 	}
 	cmd = strings.TrimSpace(cmd)
