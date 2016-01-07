@@ -112,6 +112,7 @@ func handler(conn net.Conn, ss *sparkyServer) {
 	helo, err := sc.reader.ReadString('\n')
 	if err != nil {
 		log.Println("error reading from remote:", err)
+		return
 	}
 	helo = strings.TrimSpace(helo)
 
