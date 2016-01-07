@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/dustin/randbo"
@@ -87,7 +88,7 @@ func (sc *sparkyClient) MeteredCopy(testType command, measurerDone chan<- struct
 				_, err := io.CopyN(ioutil.Discard, sc.conn, 1024*blockSize)
 				if err != nil {
 					// Handle the EOF when the test timer has expired at the remote end.
-					if err == io.EOF {
+					if err == io.EOF || err == io.ErrClosedPipe || err == syscall.EPIPE {
 						close(measurerDone)
 						return
 					}
@@ -111,7 +112,7 @@ func (sc *sparkyClient) MeteredCopy(testType command, measurerDone chan<- struct
 				// Copy data from our RNG to the net.Conn in (blockSize) KB chunks
 				_, err := io.CopyN(sc.conn, rnd, 1024*blockSize)
 				if err != nil {
-					if err == io.EOF {
+					if err == io.EOF || err == io.ErrClosedPipe || err == syscall.EPIPE {
 						close(measurerDone)
 						return
 					}
