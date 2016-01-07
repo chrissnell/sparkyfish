@@ -1,7 +1,7 @@
 # sparkyfish
 An open-source internet speed and latency tester.  You can test your bandwidth against a public Sparkyfish server or host your own server with the included server-side daemon.
 
-<img src="http://island.nu/github/sparkyfish/sparkyfish-v1.1.gif">
+<img src="http://island.nu/github/sparkyfish/sparkyfish-v1.1.png">
 
 # About
 
