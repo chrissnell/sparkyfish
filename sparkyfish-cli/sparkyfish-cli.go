@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/randbo"
 	"github.com/gizak/termui"
 )
 
@@ -34,6 +36,8 @@ const (
 type sparkyClient struct {
 	conn               net.Conn
 	reader             *bufio.Reader
+	randomData         []byte
+	randReader         *bytes.Reader
 	serverCname        string
 	serverLocation     string
 	serverHostname     string
@@ -100,6 +104,19 @@ func main() {
 // NewsparkyClient creates a new sparkyClient object
 func newsparkyClient() *sparkyClient {
 	m := sparkyClient{}
+
+	// Make a 10MB byte slice to hold our random data blob
+	m.randomData = make([]byte, 1024*1024*10)
+
+	// Use a randbo Reader to fill our big slice with random data
+	_, err := randbo.New().Read(m.randomData)
+	if err != nil {
+		log.Fatalln("error generating random data:", err)
+	}
+
+	// Create a bytes.Reader over this byte slice
+	m.randReader = bytes.NewReader(m.randomData)
+
 	return &m
 }
 

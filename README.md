@@ -1,5 +1,5 @@
 # sparkyfish
-An open-source internet speed and latency tester.  You can test your bandwidth against a public Sparkyfish server or host your own server with the included server-side daemon.
+An open-source internet speed and latency tester.  You can test your bandwidth against a [public Sparkyfish server](https://github.com/chrissnell/sparkyfish/blob/master/docs/PUBLIC-SERVERS.md) or host your own server with the included server-side daemon.
 
 <img src="http://island.nu/github/sparkyfish/sparkyfish-v1.1.png">
 
@@ -48,7 +48,7 @@ reset  # Fix the broken terminal size env before you run it again
 If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
 
 ```
-go get github.com/chrissnell/sparkyfish
+go get github.com/chrissnell/sparkyfish/sparkyfish-cli
 ```
 
 Your binaries will be placed in ```$GOPATH/bin/```.
@@ -65,7 +65,17 @@ chmod 755 <binary filename>
 
 By default, the server listens on port 7121, so make sure that you open a firewall hole for it if needed.  If the port is firewalled, the client will hang during the ping testing.
 
+### Building from source (optional)
+If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
+
+```
+go get github.com/chrissnell/sparkyfish/sparkyfish-server
+```
+
 ### Docker method
+Running a Sparkyfish server in Docker is easy to do but **not suited for production purposes** because the throughput can be limited by flaky networking if you're not running a recent Linux kernel and Docker version.  I recommend you test with Docker and then deploy the native binary outside of Docker if you're going to run a permanent or public server.
+
+To run under Docker:
 ```
 docker pull chrissnell/sparkyfish-server:latest
 docker run -e LOCATION="My Town, Somewhere, USA" -d -p 7121:7121 chrissnell/sparkyfish-server:latest
@@ -79,3 +89,6 @@ docker run -e LOCATION="My Town, Somewhere, USA" -d -p 7121:7121 chrissnell/spar
 * Move to a WebSockets-based protocol for easier client-side support
 * HTML/JS web-based client! (Want to write one?)
 * iOS and Android native clients (help needed)
+
+# IRC
+You can find the author and some operators of public servers in **#sparkyfish** on Freenode.  Come join us!

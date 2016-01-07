@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dustin/randbo"
 	"github.com/gizak/termui"
 )
 
@@ -34,7 +33,6 @@ func (sc *sparkyClient) runThroughputTest(testType command) {
 // and then performing the appropriate I/O copy, sending "ticks" by channel as
 // each block of data passes through.
 func (sc *sparkyClient) MeteredCopy(testType command, measurerDone chan<- struct{}) {
-	var rnd io.Reader
 	var tl time.Duration
 
 	// Connect to the remote sparkyfish server
@@ -67,8 +65,6 @@ func (sc *sparkyClient) MeteredCopy(testType command, measurerDone chan<- struct
 			termui.Close()
 			log.Fatalln(err)
 		}
-		// Create a new randbo Reader, used to generate our random data that we'll upload
-		rnd = randbo.New()
 	}
 
 	// Set a timer for running the tests
@@ -109,9 +105,10 @@ func (sc *sparkyClient) MeteredCopy(testType command, measurerDone chan<- struct
 				close(measurerDone)
 				return
 			default:
-				// Copy data from our RNG to the net.Conn in (blockSize) KB chunks
-				_, err := io.CopyN(sc.conn, rnd, 1024*blockSize)
+				// Copy data from our pre-filled bytes.Reader to the net.Conn in (blockSize) KB chunks
+				_, err := io.CopyN(sc.conn, sc.randReader, 1024*blockSize)
 				if err != nil {
+					// If we get any of these errors, it probably just means that the server closed the connection
 					if err == io.EOF || err == io.ErrClosedPipe || err == syscall.EPIPE {
 						close(measurerDone)
 						return
@@ -119,6 +116,13 @@ func (sc *sparkyClient) MeteredCopy(testType command, measurerDone chan<- struct
 					log.Println("Error copying:", err)
 					return
 				}
+
+				// Make sure that we have enough runway in our bytes.Reader to handle the next read
+				if sc.randReader.Len() <= int(1024*blockSize) {
+					// We're nearing the end of the Reader, so seek back to the beginning and start again
+					sc.randReader.Seek(0, 0)
+				}
+
 				// With each chunk copied, we send a message on our blockTicker channel
 				sc.blockTicker <- true
 			}
