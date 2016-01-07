@@ -1,5 +1,5 @@
 FROM gliderlabs/alpine:latest
-MAINTAINER Chris Snell <chris.snell@gmail.com>
+MAINTAINER Chris Snell github.com/chrissnell
 ADD sparkyfish-server-linux-amd64 /sparkyfish-server
 ENV DEBUG false
 ENV CNAME none
