@@ -20,6 +20,7 @@ If you want to try a specific server, here's a list of the current public server
 | sparky.ga.hamwan.net | Atlanta, GA | W4AQL | Georgia Institute of Technology | 1 Gbps up/down | IPv4|
 | eu-netherlands.sparkyfish.chrissnell.com | Amsterdam, NL | Josh Braegger |DigitalOcean| 30 Mbps up/down | IPv4 |
 | eu-germany.sparkyfish.com | Gunzenhausen, DE | Kirk Harr | Hetzner.de | 10 Mbps up/down | IPv4 + IPv6 |
+| sparkyfish.neverlocate.me | Los Angeles, CA | Brandon Lopez | Vultr | 1GBit up/down | IPv4 |
 
 # Host a Public Server
 If you're willing to help us out and host a public server, please add yourself to this page and submit a PR and we'll get you added.  **We especially need more servers with 100+ Mbps connections!**
