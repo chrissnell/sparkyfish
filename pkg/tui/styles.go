@@ -47,8 +47,11 @@ var (
 				Foreground(lipgloss.Color("8")).
 				Background(lipgloss.Color("0")) // dark
 
+	dividerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")) // dim gray
+
 	helpStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("11")). // yellow
-			Background(lipgloss.Color("4"))   // blue
+			Foreground(lipgloss.Color("15")). // white
+			Background(lipgloss.Color("1"))   // red
 )

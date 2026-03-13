@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -20,6 +21,11 @@ import (
 const (
 	minWidth  = 60
 	minHeight = 24
+
+	// Expected sample counts per phase, used to scale charts to full width.
+	expectedPingSamples = 30 // numPings
+	expectedDlSamples  = 24 // (10s + 2s grace) / 500ms
+	expectedUlSamples  = 20 // 10s / 500ms
 )
 
 type phase int
@@ -88,6 +94,11 @@ type Model struct {
 	ulChart      streamlinechart.Model
 	latencyChart sparkline.Model
 
+	// Columns pushed so far per chart, for proportional fill
+	dlColsPushed  int
+	ulColsPushed  int
+	latColsPushed int
+
 	err error
 }
 
@@ -139,6 +150,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "Q", "ctrl+c":
 			m.cancel()
 			return m, tea.Quit
+		case "r", "R":
+			if m.phase == phaseDone || m.phase == phaseError {
+				return m.resetTest()
+			}
 		}
 
 	case serverInfoMsg:
@@ -197,9 +212,11 @@ func (m Model) View() string {
 
 	// Banner
 	sections = append(sections, m.renderBanner())
+	sections = append(sections, dividerStyle.Render(strings.Repeat("─", m.width)))
 
 	// Latency row
 	sections = append(sections, m.renderLatencyRow())
+	sections = append(sections, dividerStyle.Render(strings.Repeat("─", m.width)))
 
 	// Charts row
 	sections = append(sections, m.renderChartsRow())
@@ -363,6 +380,9 @@ func (m Model) renderProgress() string {
 
 func (m Model) renderHelp() string {
 	help := " COMMANDS: [q]uit"
+	if m.phase == phaseDone || m.phase == phaseError {
+		help += "  [r]etest"
+	}
 	padding := m.width - len(help)
 	if padding < 0 {
 		padding = 0
@@ -374,8 +394,15 @@ func (m Model) renderHelp() string {
 
 func (m *Model) addPingSample(s backend.PingSample) {
 	m.pings = append(m.pings, s.Latency)
-	m.latencyChart.Push(ms(s.Latency))
 	m.pingMin, m.pingMax, m.pingMean, m.pingStdev = measure.DurationStats(m.pings)
+
+	v := ms(s.Latency)
+	chartW := m.latencyChart.Width()
+	targetCols := proportionalColumns(len(m.pings), expectedPingSamples, chartW)
+	for m.latColsPushed < targetCols {
+		m.latencyChart.Push(v)
+		m.latColsPushed++
+	}
 }
 
 func (m *Model) addDlSample(s backend.ThroughputSample) {
@@ -385,7 +412,13 @@ func (m *Model) addDlSample(s backend.ThroughputSample) {
 		m.dlMax = s.Mbps
 	}
 	m.dlAvg = measure.Mean(m.dlSamples)
-	m.dlChart.Push(s.Mbps)
+
+	chartW := m.dlChart.GraphWidth()
+	targetCols := proportionalColumns(len(m.dlSamples), expectedDlSamples, chartW)
+	for m.dlColsPushed < targetCols {
+		m.dlChart.Push(s.Mbps)
+		m.dlColsPushed++
+	}
 }
 
 func (m *Model) addUlSample(s backend.ThroughputSample) {
@@ -395,7 +428,23 @@ func (m *Model) addUlSample(s backend.ThroughputSample) {
 		m.ulMax = s.Mbps
 	}
 	m.ulAvg = measure.Mean(m.ulSamples)
-	m.ulChart.Push(s.Mbps)
+
+	chartW := m.ulChart.GraphWidth()
+	targetCols := proportionalColumns(len(m.ulSamples), expectedUlSamples, chartW)
+	for m.ulColsPushed < targetCols {
+		m.ulChart.Push(s.Mbps)
+		m.ulColsPushed++
+	}
+}
+
+// proportionalColumns returns how many chart columns should be filled
+// after receiving sampleCount of expectedTotal samples, given chartWidth
+// total columns. This ensures the chart is exactly full at the last sample.
+func proportionalColumns(sampleCount, expectedTotal, chartWidth int) int {
+	if expectedTotal <= 0 || chartWidth <= 0 {
+		return sampleCount
+	}
+	return int(math.Round(float64(sampleCount) / float64(expectedTotal) * float64(chartWidth)))
 }
 
 func (m *Model) resizeCharts() {
@@ -412,12 +461,50 @@ func (m *Model) resizeCharts() {
 	m.dlChart.Resize(chartW, chartH)
 	m.ulChart.Resize(chartW, chartH)
 	m.latencyChart.Resize(latW, 3)
+
+	// Re-push historical data with new proportions after resize
+	m.repushChartData()
+}
+
+func (m *Model) repushChartData() {
+	m.dlChart.ClearAllData()
+	m.dlColsPushed = 0
+	graphW := m.dlChart.GraphWidth()
+	for i, v := range m.dlSamples {
+		target := proportionalColumns(i+1, expectedDlSamples, graphW)
+		for m.dlColsPushed < target {
+			m.dlChart.Push(v)
+			m.dlColsPushed++
+		}
+	}
+
+	m.ulChart.ClearAllData()
+	m.ulColsPushed = 0
+	graphW = m.ulChart.GraphWidth()
+	for i, v := range m.ulSamples {
+		target := proportionalColumns(i+1, expectedUlSamples, graphW)
+		for m.ulColsPushed < target {
+			m.ulChart.Push(v)
+			m.ulColsPushed++
+		}
+	}
+
+	m.latencyChart.Clear()
+	m.latColsPushed = 0
+	latW := m.latencyChart.Width()
+	for i, d := range m.pings {
+		target := proportionalColumns(i+1, expectedPingSamples, latW)
+		for m.latColsPushed < target {
+			m.latencyChart.Push(ms(d))
+			m.latColsPushed++
+		}
+	}
 }
 
 func (m Model) chartHeight() int {
 	// Allocate available height to charts
-	// Fixed rows: title(1) + banner(1) + latency(5) + summary(~8) + progress(~4) + help(1) = ~20
-	avail := m.height - 20
+	// Fixed rows: title(1) + banner(1) + spacing(2) + latency(5) + summary(~8) + progress(~4) + help(1) = ~22
+	avail := m.height - 22
 	if avail < 6 {
 		avail = 6
 	}
@@ -445,6 +532,42 @@ func (m Model) progressPct() float64 {
 	default:
 		return 0
 	}
+}
+
+func (m Model) resetTest() (tea.Model, tea.Cmd) {
+	m.cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	m.ctx = ctx
+	m.cancel = cancel
+
+	m.phase = phaseConnecting
+	m.err = nil
+	m.serverInfo = backend.ServerInfo{}
+
+	m.pings = nil
+	m.pingMin = 0
+	m.pingMax = 0
+	m.pingMean = 0
+	m.pingStdev = 0
+
+	m.dlSamples = nil
+	m.ulSamples = nil
+	m.dlCur = 0
+	m.dlMax = 0
+	m.dlAvg = 0
+	m.ulCur = 0
+	m.ulMax = 0
+	m.ulAvg = 0
+
+	m.dlColsPushed = 0
+	m.ulColsPushed = 0
+	m.latColsPushed = 0
+
+	m.dlChart.ClearAllData()
+	m.ulChart.ClearAllData()
+	m.latencyChart.Clear()
+
+	return m, m.connectCmd()
 }
 
 func ms(d time.Duration) float64 {

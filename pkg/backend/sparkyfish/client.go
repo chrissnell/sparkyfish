@@ -40,6 +40,7 @@ type Client struct {
 	addr       string
 	serverInfo backend.ServerInfo
 	randBuf    []byte
+	sess       *session // reused from Connect for the first command
 }
 
 func New() *Client {
@@ -49,18 +50,11 @@ func New() *Client {
 func (c *Client) Connect(ctx context.Context, addr string) (backend.ServerInfo, error) {
 	c.addr = addr
 
-	// Pre-generate random data for upload tests
-	c.randBuf = make([]byte, randBufSize)
-	if _, err := rand.Read(c.randBuf); err != nil {
-		return backend.ServerInfo{}, fmt.Errorf("generate random data: %w", err)
-	}
-
-	// Test the connection with a handshake
 	s, info, err := dial(addr)
 	if err != nil {
 		return backend.ServerInfo{}, err
 	}
-	s.Close()
+	c.sess = s
 
 	c.serverInfo = info
 	return info, nil
@@ -69,17 +63,15 @@ func (c *Client) Connect(ctx context.Context, addr string) (backend.ServerInfo, 
 func (c *Client) Ping(ctx context.Context, results chan<- backend.PingSample) error {
 	defer close(results)
 
-	s, _, err := dial(c.addr)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
+	s := c.sess
 	if err := s.writeCommand("ECO"); err != nil {
 		return fmt.Errorf("send ECO: %w", err)
 	}
 
 	buf := make([]byte, 1)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
 	for i := 0; i < numPings; i++ {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -99,6 +91,15 @@ func (c *Client) Ping(ctx context.Context, results chan<- backend.PingSample) er
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+
+		// Wait for next tick so the TUI can render each sample
+		if i < numPings-1 {
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 	}
 
 	return nil
@@ -107,12 +108,7 @@ func (c *Client) Ping(ctx context.Context, results chan<- backend.PingSample) er
 func (c *Client) Download(ctx context.Context, results chan<- backend.ThroughputSample) error {
 	defer close(results)
 
-	s, _, err := dial(c.addr)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
+	s := c.sess
 	if err := s.writeCommand("SND"); err != nil {
 		return fmt.Errorf("send SND: %w", err)
 	}
@@ -124,13 +120,17 @@ func (c *Client) Download(ctx context.Context, results chan<- backend.Throughput
 
 func (c *Client) Upload(ctx context.Context, results chan<- backend.ThroughputSample) error {
 	defer close(results)
+	defer c.sess.Close()
 
-	s, _, err := dial(c.addr)
-	if err != nil {
-		return err
+	// Generate random data for upload on first use
+	if c.randBuf == nil {
+		c.randBuf = make([]byte, randBufSize)
+		if _, err := rand.Read(c.randBuf); err != nil {
+			return fmt.Errorf("generate random data: %w", err)
+		}
 	}
-	defer s.Close()
 
+	s := c.sess
 	if err := s.writeCommand("RCV"); err != nil {
 		return fmt.Errorf("send RCV: %w", err)
 	}

@@ -77,25 +77,27 @@ func (s *Server) handleConn(netConn net.Conn) {
 	c := newConn(netConn, s.logger)
 
 	if err := c.handshake(s.cfg.Cname, s.cfg.Location); err != nil {
-		// Silent close on client hangup during HELO
 		s.logger.Debug("handshake failed", "addr", netConn.RemoteAddr(), "err", err)
 		return
 	}
 
-	cmd, err := c.readCommand()
-	if err != nil {
-		s.logger.Debug("read command failed", "addr", netConn.RemoteAddr(), "err", err)
-		return
-	}
+	for {
+		cmd, err := c.readCommand()
+		if err != nil {
+			s.logger.Debug("read command", "addr", netConn.RemoteAddr(), "err", err)
+			return
+		}
 
-	s.logger.Info("test initiated", "addr", netConn.RemoteAddr(), "type", cmd)
+		s.logger.Info("test", "addr", netConn.RemoteAddr(), "cmd", cmd)
 
-	switch cmd {
-	case "ECO":
-		s.handleEcho(c)
-	case "SND":
-		s.handleSend(c)
-	case "RCV":
-		s.handleReceive(c)
+		switch cmd {
+		case "ECO":
+			s.handleEcho(c)
+		case "SND":
+			s.handleSend(c)
+		case "RCV":
+			s.handleReceive(c)
+			return // RCV is terminal; client closes after upload
+		}
 	}
 }

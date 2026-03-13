@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"time"
 )
 
@@ -25,6 +26,10 @@ func (s *Server) handleSend(c *conn) {
 		select {
 		case <-timer.C:
 			s.logThroughput(c, "sent", totalBytes, time.Since(start))
+			// Half-close write so client gets EOF but can still send commands
+			if tc, ok := c.rwc.(*net.TCPConn); ok {
+				tc.CloseWrite()
+			}
 			return
 		default:
 		}
