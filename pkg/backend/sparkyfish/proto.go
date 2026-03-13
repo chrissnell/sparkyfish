@@ -2,11 +2,13 @@ package sparkyfish
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"strings"
 
 	"github.com/chrissnell/sparkyfish/pkg/backend"
+	"github.com/chrissnell/sparkyfish/pkg/resolver"
 )
 
 const protocolVersion = 0
@@ -20,9 +22,27 @@ type session struct {
 // dial opens a TCP connection and performs the HELO handshake.
 // Returns a session and the server info from the handshake.
 func dial(addr string) (*session, backend.ServerInfo, error) {
-	conn, err := net.Dial("tcp", addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, backend.ServerInfo{}, fmt.Errorf("dial %s: %w", addr, err)
+		return nil, backend.ServerInfo{}, fmt.Errorf("parse address %s: %w", addr, err)
+	}
+
+	ctx := context.Background()
+	ips, err := resolver.LookupHost(ctx, host)
+	if err != nil {
+		return nil, backend.ServerInfo{}, fmt.Errorf("resolve %s: %w", host, err)
+	}
+
+	var conn net.Conn
+	var lastErr error
+	for _, ip := range ips {
+		conn, lastErr = net.Dial("tcp", net.JoinHostPort(ip, port))
+		if lastErr == nil {
+			break
+		}
+	}
+	if lastErr != nil {
+		return nil, backend.ServerInfo{}, fmt.Errorf("dial %s: %w", addr, lastErr)
 	}
 
 	s := &session{
