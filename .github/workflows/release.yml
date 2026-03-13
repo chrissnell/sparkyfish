@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows-installer:
+    runs-on: windows-latest
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Windows binary
+        shell: bash
+        run: |
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build \
+            -ldflags "-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o sparkyfish.exe ./cmd/sparkyfish
+
+      - name: Create installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          $nsis = @"
+          !include "MUI2.nsh"
+
+          Name "Sparkyfish $version"
+          OutFile "sparkyfish_${version}_windows_x86_64_installer.exe"
+          InstallDir "`$PROGRAMFILES\Sparkyfish"
+          RequestExecutionLevel admin
+
+          !insertmacro MUI_PAGE_DIRECTORY
+          !insertmacro MUI_PAGE_INSTFILES
+          !insertmacro MUI_LANGUAGE "English"
+
+          Section "Install"
+            SetOutPath `$INSTDIR
+            File "sparkyfish.exe"
+
+            ; Add to PATH
+            EnVar::AddValue "PATH" `$INSTDIR
+            Pop `$0
+
+            ; Create uninstaller
+            WriteUninstaller "`$INSTDIR\uninstall.exe"
+
+            ; Start menu shortcut
+            CreateDirectory "`$SMPROGRAMS\Sparkyfish"
+            CreateShortcut "`$SMPROGRAMS\Sparkyfish\Uninstall.lnk" "`$INSTDIR\uninstall.exe"
+          SectionEnd
+
+          Section "Uninstall"
+            Delete "`$INSTDIR\sparkyfish.exe"
+            Delete "`$INSTDIR\uninstall.exe"
+            RMDir "`$INSTDIR"
+            RMDir "`$SMPROGRAMS\Sparkyfish"
+
+            ; Remove from PATH
+            EnVar::DeleteValue "PATH" `$INSTDIR
+            Pop `$0
+          SectionEnd
+          "@
+          Set-Content -Path "installer.nsi" -Value $nsis
+
+      - name: Install NSIS and EnVar plugin
+        shell: pwsh
+        run: |
+          choco install nsis -y
+          $pluginUrl = "https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip"
+          Invoke-WebRequest -Uri $pluginUrl -OutFile envar.zip
+          Expand-Archive -Path envar.zip -DestinationPath envar
+          $nsisDir = "C:\Program Files (x86)\NSIS"
+          Copy-Item -Path "envar\Plugins\x86-ansi\EnVar.dll" -Destination "$nsisDir\Plugins\x86-ansi\" -Force
+          Copy-Item -Path "envar\Plugins\x86-unicode\EnVar.dll" -Destination "$nsisDir\Plugins\x86-unicode\" -Force
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
+
+      - name: Upload installer to release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" \
+            "sparkyfish_${VERSION}_windows_x86_64_installer.exe" \
+            --clobber
