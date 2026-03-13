@@ -1,14 +1,9 @@
-binaries/*
-dist/upload-to-server.sh
-sparkyfish-server/sparkyfish-server
-sparkyfish-server/sparkyfish-server-linux-amd64
-sparkyfish-cli/sparkyfish-cli
-sparkyfish-cli/sparkyfish-cli-linux-amd64
 bin/
+dist/
 scratch/
+
 .claude/
 .DS_Store
 *.swp
 *.swo
 *~
-sparkyfish
