@@ -1,0 +1,6 @@
+apiVersion: v2
+name: sparkyfish-server
+description: A speed test server for measuring network throughput and latency
+type: application
+version: 0.1.0
+appVersion: "v2.0.0"

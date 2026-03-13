@@ -1,0 +1,41 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/chrissnell/sparkyfish
+  tag: ""  # defaults to appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+sparkyfish:
+  cname: ""
+  location: ""
+  debug: false
+
+service:
+  type: LoadBalancer
+  port: 7121
+  # Annotations for MetalLB or other load balancer controllers.
+  # For MetalLB, set an address pool or specific IP:
+  #   metallb.universe.tf/loadBalancerIPs: "192.168.1.100"
+  #   metallb.universe.tf/address-pool: "default"
+  annotations: {}
+  # externalTrafficPolicy controls whether external traffic is routed
+  # to node-local or cluster-wide endpoints. "Local" preserves client
+  # source IPs, which is important for a speed test server.
+  externalTrafficPolicy: Local
+
+resources: {}
+  # limits:
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
