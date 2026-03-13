@@ -6,7 +6,7 @@ An open-source network speed and latency tester with a rich terminal UI. Deploy 
 
 ## Why sparkyfish?
 
-- **Free, private speed test infrastructure** -- Ookla's private Speedtest server now costs $5,000+/year. Sparkyfish is free and open source.
+- **Run your own speed test servers** -- Ookla's private Speedtest server now costs $5,000+/year. Sparkyfish is free and open source.
 - **No artificial limits** -- test at whatever speed your server and client can handle: 1 Gbps, 10 Gbps, or beyond.
 - **Rich terminal UI** -- real-time streaming line charts for download, upload, and latency built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [ntcharts](https://github.com/NimbleMarkets/ntcharts).
 - **No net-neutrality concerns** -- ISPs can't selectively prioritize your test traffic.
