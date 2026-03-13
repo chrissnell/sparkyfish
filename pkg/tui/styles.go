@@ -44,7 +44,7 @@ var (
 			Background(lipgloss.Color("2")) // green bg
 
 	progressBarEmpty = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("8")).
+				Foreground(lipgloss.Color("15")).
 				Background(lipgloss.Color("0")) // dark
 
 	dividerStyle = lipgloss.NewStyle().
