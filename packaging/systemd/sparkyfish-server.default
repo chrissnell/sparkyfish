@@ -1,0 +1,9 @@
+# Configuration for sparkyfish-server
+# Edit this file and restart the service: systemctl restart sparkyfish-server
+
+# Server options (see sparkyfish-server --help)
+SPARKYFISH_OPTS="-listen-addr=:7121"
+
+# Examples:
+# SPARKYFISH_OPTS="-listen-addr=:7121 -location='Dallas, TX' -cname=speedtest.example.com"
+# SPARKYFISH_OPTS="-listen-addr=:7121 -location='Frankfurt, DE' -debug"

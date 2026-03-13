@@ -13,11 +13,25 @@ An open-source network speed and latency tester with a rich terminal UI. Deploy 
 - **Simple architecture** -- one static binary for the client, one for the server. No dependencies.
 - **Cross-platform** -- Linux, macOS, Windows, FreeBSD, OpenBSD. amd64 and arm64.
 
-## Installing
+## Installing the client
 
-### Binary releases
+### Debian / Ubuntu
+```
+sudo dpkg -i sparkyfish_<version>_amd64.deb
+```
 
-Download the latest release from the [Releases](https://github.com/chrissnell/sparkyfish/releases/) page. Packages are available as `.deb`, `.rpm`, and standalone archives.
+### RHEL / Fedora
+```
+sudo rpm -i sparkyfish_<version>_amd64.rpm
+```
+
+### Arch Linux (AUR)
+```
+yay -S sparkyfish
+```
+
+### macOS / other
+Download the archive for your platform from the [Releases](https://github.com/chrissnell/sparkyfish/releases/) page and extract the binary to somewhere in your `$PATH`.
 
 ### Build from source
 
@@ -26,94 +40,37 @@ Requires Go 1.22+:
 ```
 git clone https://github.com/chrissnell/sparkyfish.git
 cd sparkyfish
-make            # builds both client and server into bin/
-make client     # client only
-make server     # server only
+make client     # builds bin/sparkyfish
 ```
 
-## Running the client
+## Installing the server
 
+### Debian / Ubuntu
 ```
-sparkyfish <server-hostname>[:port]
-```
-
-The default port is `7121`. The client connects, runs latency probes, then measures download and upload throughput, displaying live results in the terminal.
-
-**Keyboard controls:**
-- `q` / `Ctrl+C` -- quit
-- `r` -- re-run the test (after completion)
-
-The terminal must be at least 60x24 characters.
-
-## Running the server
-
-The server is a single binary that listens for client connections and runs speed tests against them.
-
-```
-sparkyfish-server [flags]
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-listen-addr` | `:7121` | IP:port to listen on |
-| `-cname` | | Canonical hostname reported to clients |
-| `-location` | | Physical location displayed to clients |
-| `-debug` | `false` | Enable verbose logging |
-
-Make sure port 7121/tcp is open in your firewall.
-
-### systemd
-
-Install the binary to `/usr/bin/sparkyfish-server` (or use the `.deb`/`.rpm` package), then create the unit file:
-
-**/etc/systemd/system/sparkyfish-server.service**
-```ini
-[Unit]
-Description=Sparkyfish speed test server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/sparkyfish-server \
-    -listen-addr=:7121 \
-    -location="Dallas, TX"
-
-# Hardening
-DynamicUser=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-PrivateDevices=yes
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectKernelLogs=yes
-ProtectControlGroups=yes
-ProtectClock=yes
-ProtectHostname=yes
-RestrictAddressFamilies=AF_INET AF_INET6
-RestrictNamespaces=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes
-NoNewPrivileges=yes
-SystemCallArchitectures=native
-SystemCallFilter=@system-service
-SystemCallFilter=~@privileged @resources
-
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-```
-sudo systemctl daemon-reload
+sudo apt install ./sparkyfish-server_<version>_amd64.deb
 sudo systemctl enable --now sparkyfish-server
 ```
+
+### RHEL / Fedora
+```
+sudo rpm -i sparkyfish-server_<version>_amd64.rpm
+sudo systemctl enable --now sparkyfish-server
+```
+
+### Arch Linux (AUR)
+```
+yay -S sparkyfish-server
+sudo systemctl enable --now sparkyfish-server
+```
+
+The packages create a `sparkyfish` system user, install a systemd unit, and place the default config at `/etc/default/sparkyfish-server`. Edit that file to set your location and other options:
+
+```
+# /etc/default/sparkyfish-server
+SPARKYFISH_OPTS="-listen-addr=:7121 -location='Dallas, TX' -cname=speedtest.example.com"
+```
+
+Then restart: `sudo systemctl restart sparkyfish-server`
 
 ### Kubernetes (Helm)
 
@@ -146,6 +103,43 @@ docker run -d -p 7121:7121 ghcr.io/chrissnell/sparkyfish:latest \
 ```
 
 Note: Docker networking overhead can reduce throughput accuracy. For production use, prefer running the binary directly or in Kubernetes with `hostNetwork`.
+
+### Build from source
+
+Requires Go 1.22+:
+
+```
+git clone https://github.com/chrissnell/sparkyfish.git
+cd sparkyfish
+make server     # builds bin/sparkyfish-server
+```
+
+## Usage
+
+### Client
+
+```
+sparkyfish <server-hostname>[:port]
+```
+
+The default port is `7121`. The client connects, runs latency probes, then measures download and upload throughput, displaying live results in the terminal.
+
+**Keyboard controls:**
+- `q` / `Ctrl+C` -- quit
+- `r` -- re-run the test (after completion)
+
+The terminal must be at least 60x24 characters.
+
+### Server flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-listen-addr` | `:7121` | IP:port to listen on |
+| `-cname` | | Canonical hostname reported to clients |
+| `-location` | | Physical location displayed to clients |
+| `-debug` | `false` | Enable verbose logging |
+
+Make sure port 7121/tcp is open in your firewall.
 
 ## Protocol
 

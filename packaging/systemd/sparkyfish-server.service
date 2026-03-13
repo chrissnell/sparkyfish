@@ -1,0 +1,39 @@
+[Unit]
+Description=Sparkyfish speed test server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sparkyfish
+Group=sparkyfish
+EnvironmentFile=-/etc/default/sparkyfish-server
+ExecStart=/usr/bin/sparkyfish-server $SPARKYFISH_OPTS
+
+# Hardening
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

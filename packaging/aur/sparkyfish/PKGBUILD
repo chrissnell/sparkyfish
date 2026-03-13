@@ -1,0 +1,22 @@
+# Maintainer: Chris Snell <chris@chrissnell.com>
+pkgname=sparkyfish
+pkgver=VERSION
+pkgrel=1
+pkgdesc='Network speed test client with rich terminal UI'
+arch=('x86_64' 'aarch64')
+url='https://github.com/chrissnell/sparkyfish'
+license=('MIT')
+makedepends=('go>=1.22')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/chrissnell/sparkyfish/archive/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "${pkgname}-${pkgver}"
+    export CGO_ENABLED=0
+    go build -ldflags "-s -w -X main.version=v${pkgver}" -o "${pkgname}" ./cmd/sparkyfish
+}
+
+package() {
+    cd "${pkgname}-${pkgver}"
+    install -Dm755 "${pkgname}" "${pkgdir}/usr/bin/${pkgname}"
+}

@@ -1,0 +1,26 @@
+# Maintainer: Chris Snell <chris@chrissnell.com>
+pkgname=sparkyfish-server
+pkgver=VERSION
+pkgrel=1
+pkgdesc='Network speed test server'
+arch=('x86_64' 'aarch64')
+url='https://github.com/chrissnell/sparkyfish'
+license=('MIT')
+makedepends=('go>=1.22')
+source=("sparkyfish-${pkgver}.tar.gz::https://github.com/chrissnell/sparkyfish/archive/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+backup=('etc/default/sparkyfish-server')
+
+build() {
+    cd "sparkyfish-${pkgver}"
+    export CGO_ENABLED=0
+    go build -ldflags "-s -w -X main.version=v${pkgver}" -o "${pkgname}" ./cmd/sparkyfish-server
+}
+
+package() {
+    cd "sparkyfish-${pkgver}"
+    install -Dm755 "${pkgname}" "${pkgdir}/usr/bin/${pkgname}"
+    install -Dm644 packaging/systemd/sparkyfish-server.service "${pkgdir}/usr/lib/systemd/system/sparkyfish-server.service"
+    install -Dm644 packaging/systemd/sparkyfish-server.sysusers "${pkgdir}/usr/lib/sysusers.d/sparkyfish-server.conf"
+    install -Dm644 packaging/systemd/sparkyfish-server.default "${pkgdir}/etc/default/sparkyfish-server"
+}

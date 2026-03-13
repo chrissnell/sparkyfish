@@ -106,6 +106,18 @@ nfpms:
       - deb
       - rpm
     bindir: /usr/bin
+    contents:
+      - src: packaging/systemd/sparkyfish-server.service
+        dst: /usr/lib/systemd/system/sparkyfish-server.service
+      - src: packaging/systemd/sparkyfish-server.sysusers
+        dst: /usr/lib/sysusers.d/sparkyfish-server.conf
+      - src: packaging/systemd/sparkyfish-server.default
+        dst: /etc/default/sparkyfish-server
+        type: config|noreplace
+    scripts:
+      postinstall: packaging/scripts/postinstall.sh
+      preremove: packaging/scripts/preremove.sh
+      postremove: packaging/scripts/postremove.sh
 
 checksum:
   name_template: 'checksums.txt'
