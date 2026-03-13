@@ -9,10 +9,10 @@ IMAGE   := ghcr.io/chrissnell/sparkyfish
 all: client server
 
 client:
-	go build $(LDFLAGS) -o scratch/sparkyfish ./cmd/sparkyfish
+	go build $(LDFLAGS) -o bin/sparkyfish ./cmd/sparkyfish
 
 server:
-	go build $(LDFLAGS) -o scratch/sparkyfish-server ./cmd/sparkyfish-server
+	go build $(LDFLAGS) -o bin/sparkyfish-server ./cmd/sparkyfish-server
 
 test:
 	go test ./cmd/... ./pkg/...
@@ -21,7 +21,7 @@ vet:
 	go vet ./cmd/... ./pkg/...
 
 clean:
-	rm -f scratch/sparkyfish scratch/sparkyfish-server
+	rm -f bin/sparkyfish bin/sparkyfish-server
 
 # --- Docker ---
 

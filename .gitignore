@@ -4,6 +4,7 @@ sparkyfish-server/sparkyfish-server
 sparkyfish-server/sparkyfish-server-linux-amd64
 sparkyfish-cli/sparkyfish-cli
 sparkyfish-cli/sparkyfish-cli-linux-amd64
+bin/
 scratch/
 .claude/
 .DS_Store

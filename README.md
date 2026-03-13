@@ -26,7 +26,7 @@ Requires Go 1.22+:
 ```
 git clone https://github.com/chrissnell/sparkyfish.git
 cd sparkyfish
-make            # builds both client and server into scratch/
+make            # builds both client and server into bin/
 make client     # client only
 make server     # server only
 ```
