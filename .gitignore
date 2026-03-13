@@ -6,3 +6,8 @@ sparkyfish-cli/sparkyfish-cli
 sparkyfish-cli/sparkyfish-cli-linux-amd64
 scratch/
 .claude/
+.DS_Store
+*.swp
+*.swo
+*~
+sparkyfish
