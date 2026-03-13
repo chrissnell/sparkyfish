@@ -1,94 +1,155 @@
 # sparkyfish
-An open-source internet speed and latency tester.  You can test your bandwidth against a [public Sparkyfish server](https://github.com/chrissnell/sparkyfish/blob/master/docs/PUBLIC-SERVERS.md) or host your own server with the included server-side daemon.
+
+A fast, open-source network speed and latency tester with a rich terminal UI. Run your own speed test infrastructure instead of relying on third-party services.
 
 ![sparkyfish demo](.github/sparkyfish.gif)
 
-# About
+## Why sparkyfish?
 
-Sparkyfish offers several advantages over speedtest.net and its unofficial clients like [speedtest-cli](https://github.com/sivel/speedtest-cli)
+- **Free, private speed test infrastructure** -- Ookla's private Speedtest server now costs $5,000+/year. Sparkyfish is free and open source.
+- **No artificial limits** -- test at whatever speed your server and client can handle: 1 Gbps, 10 Gbps, or beyond.
+- **Rich terminal UI** -- real-time streaming line charts for download, upload, and latency built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [ntcharts](https://github.com/NimbleMarkets/ntcharts).
+- **No net-neutrality concerns** -- ISPs can't selectively prioritize your test traffic.
+- **Simple architecture** -- one static binary for the client, one for the server. No dependencies.
+- **Cross-platform** -- Linux, macOS, Windows, FreeBSD, OpenBSD. amd64 and arm64.
 
-* You can run your own **private** sparkyfish server, free-of-charge. (compare to $1,995+ that Ookla charges for a private speedtest.net server)
-* You can test speeds > 1 Gbps if your server and client hosts support them.  Most speedtest.net test servers don't have this capacity.
-* Sparkyfish comes with a colorful console-based client that runs on *nix and Windows
-* [No net-neutrality issues](https://www.techdirt.com/blog/netneutrality/articles/20141124/14064729242/fcc-gives-t-mobile-talking-to-exempting-speedtests-caps-preventing-users-seeing-theyd-been-throttled.shtml)
-* Sparkyfish uses an [open protocol](https://github.com/chrissnell/sparkyfish/blob/master/docs/PROTOCOL.md) for testing.  You're welcome to implement your own alternative front-end client or server!
+## Installing
 
-# Getting Started
-### Installation
-The easiest way to get started is to [download a binary release](https://github.com/chrissnell/sparkyfish/releases/).  Sparkyfish is written in Go and compiles to a static binary so there are no dependencies if you're using the official binaries.  
+### Binary releases
 
-Once you've downloaded the binary...
-```
-gunzip <binary>.gz
-chmod 755 <binary>
-mv <binary> /usr/local/bin/sparkyfish-cli
-```
+Download the latest release from the [Releases](https://github.com/chrissnell/sparkyfish/releases/) page. Packages are available as `.deb`, `.rpm`, and standalone archives.
 
-### Running the client
-Run the client like this:
+### Build from source
 
-```sparkyfish-cli <sparkyfish server IP>[:port]```
-
-The client takes only one parameter.  The IP (with optional :port) of the sparkyfish server.  You can use our public server round-robin to try it out:  ```us.sparkyfish.chrissnell.com```.  Sparkyfish servers default to port 7121.
-
-**Don't expect massive bandwidth from any of our current public servers.  They're mostly just some small public cloud servers that I scrounged up from friends.**  For more info on the public sparkyfish servers, see [docs/PUBLIC-SERVERS.md](docs/PUBLIC-SERVERS.md).
-
-### Running from Docker (optional)
-You can also run ```sparkyfish-cli``` via Docker.  I'm not sure if this is the most optimal way to use it, however. After running the client once, the terminal window environment gets a little hosed up and sparkyfish-cli will complain about window size the next time you run it.  You can fix these by running ```reset``` in your terminal and then-re-running the image.
-
-If you want to test it out, here's how to do it:
+Requires Go 1.22+:
 
 ```
-docker pull chrissnell/sparkyfish-cli:latest
-docker run --dns 8.8.8.8 -t -i chrissnell/sparkyfish-cli:latest us.sparkyfish.chrissnell.com
-reset  # Fix the broken terminal size env before you run it again
+git clone https://github.com/chrissnell/sparkyfish.git
+cd sparkyfish
+go build -o sparkyfish ./cmd/sparkyfish
+go build -o sparkyfish-server ./cmd/sparkyfish-server
 ```
 
-### Building from source (optional)
-If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
+## Running the client
 
 ```
-go get github.com/chrissnell/sparkyfish/sparkyfish-cli
+sparkyfish <server-hostname>[:port]
 ```
 
-Your binaries will be placed in ```$GOPATH/bin/```.
+The default port is `7121`. The client connects, runs latency probes, then measures download and upload throughput, displaying live results in the terminal.
 
-# Running your own Sparkyfish server
-### Running from command line
-You can download the latest ```sparkyfish-server``` release from the [Releases](https://github.com/chrissnell/sparkyfish/releases/) page.  Then:
-```
-gunzip <binary filename>.gz
-chmod 755 <binary filename>
-./<binary filename> -h  # to see options
-./<binary filename> -location="Your Physical Location, Somewhere"
-```
+**Keyboard controls:**
+- `q` / `Ctrl+C` -- quit
+- `r` -- re-run the test (after completion)
 
-By default, the server listens on port 7121, so make sure that you open a firewall hole for it if needed.  If the port is firewalled, the client will hang during the ping testing.
+The terminal must be at least 60x24 characters.
 
-### Building from source (optional)
-If you prefer to build from source, you'll need a working Go environment (v1.5+ recommended) with ```GOROOT``` and ```GOPATH``` env variables properly configured.   To build from source, run this command:
+## Running the server
+
+The server is a single binary that listens for client connections and runs speed tests against them.
 
 ```
-go get github.com/chrissnell/sparkyfish/sparkyfish-server
+sparkyfish-server [flags]
 ```
 
-### Docker method
-Running a Sparkyfish server in Docker is easy to do but **not suited for production purposes** because the throughput can be limited by flaky networking if you're not running a recent Linux kernel and Docker version.  I recommend you test with Docker and then deploy the native binary outside of Docker if you're going to run a permanent or public server.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-listen-addr` | `:7121` | IP:port to listen on |
+| `-cname` | | Canonical hostname reported to clients |
+| `-location` | | Physical location displayed to clients |
+| `-debug` | `false` | Enable verbose logging |
 
-To run under Docker:
+Make sure port 7121/tcp is open in your firewall.
+
+### systemd
+
+Install the binary to `/usr/bin/sparkyfish-server` (or use the `.deb`/`.rpm` package), then create the unit file:
+
+**/etc/systemd/system/sparkyfish-server.service**
+```ini
+[Unit]
+Description=Sparkyfish speed test server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/sparkyfish-server \
+    -listen-addr=:7121 \
+    -location="Dallas, TX"
+
+# Hardening
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 ```
-docker pull chrissnell/sparkyfish-server:latest
-docker run -e LOCATION="My Town, Somewhere, USA" -d -p 7121:7121 chrissnell/sparkyfish-server:latest
+
+Enable and start:
+```
+sudo systemctl daemon-reload
+sudo systemctl enable --now sparkyfish-server
 ```
 
-# Future Efforts
-* Proper testing code and automated builds
-* A Sparkyfish directory server to allow for auto-registration of public Sparkyfish servers, including Route53 DNS setup
-* Adding a HTTP listener to ```sparkyfish-server``` to allow for Route53 health checks
-* Use termui's grid layout mode to allow for auto-resizing
-* Move to a WebSockets-based protocol for easier client-side support
-* HTML/JS web-based client! (Want to write one?)
-* iOS and Android native clients (help needed)
+### Kubernetes (Helm)
 
-# IRC
-You can find the author and some operators of public servers in **#sparkyfish** on Freenode.  Come join us!
+A Helm chart is included in `packaging/helm/sparkyfish-server/`.
+
+```
+helm install sparkyfish-server ./packaging/helm/sparkyfish-server \
+    --set sparkyfish.location="Dallas, TX" \
+    --set sparkyfish.cname="speedtest.example.com"
+```
+
+Key values:
+
+| Value | Default | Description |
+|-------|---------|-------------|
+| `sparkyfish.location` | `""` | Physical location shown to clients |
+| `sparkyfish.cname` | `""` | Canonical hostname reported to clients |
+| `sparkyfish.debug` | `false` | Enable verbose server logging |
+| `service.type` | `LoadBalancer` | Kubernetes service type |
+| `service.externalTrafficPolicy` | `Local` | Preserves client source IPs |
+| `service.annotations` | `{}` | Annotations for MetalLB, etc. |
+
+The deployment runs as non-root with a read-only root filesystem and all capabilities dropped.
+
+### Docker
+
+```
+docker run -d -p 7121:7121 ghcr.io/chrissnell/sparkyfish:latest \
+    -location="Dallas, TX"
+```
+
+Note: Docker networking overhead can reduce throughput accuracy. For production use, prefer running the binary directly or in Kubernetes with `hostNetwork`.
+
+## Protocol
+
+Sparkyfish uses a simple, open TCP protocol on port 7121. See [docs/PROTOCOL.md](docs/PROTOCOL.md) for details. You're welcome to implement your own compatible client or server.
+
+## License
+
+MIT
