@@ -1,6 +1,6 @@
 # sparkyfish
 
-A fast, open-source network speed and latency tester with a rich terminal UI. Run your own speed test infrastructure instead of relying on third-party services.
+An open-source network speed and latency tester with a rich terminal UI. Deploy your own server anywhere and measure real throughput between any two points on your network.
 
 ![sparkyfish demo](.github/sparkyfish.gif)
 
